@@ -10,6 +10,16 @@ import { publishDocumentUploaded } from "../../queue/publisher";
 const env = loadEnv();
 export const documentsRouter = Router();
 
+function toPublicMinioUrl(internalUrl: string) {
+  const src = new URL(internalUrl);
+  const base = new URL(env.MINIO_PUBLIC_URL);
+  const prefix = base.pathname.replace(/\/+$/, "");
+  src.protocol = base.protocol;
+  src.host = base.host;
+  src.pathname = `${prefix}${src.pathname}`;
+  return src.toString();
+}
+
 documentsRouter.post("/presign", requireAuth, async (req, res) => {
   await ensureBucket();
   const body = z
@@ -23,11 +33,7 @@ documentsRouter.post("/presign", requireAuth, async (req, res) => {
   const objectKey = `${req.auth!.userId}/${uuidv4()}-${body.filename}`.replaceAll("..", ".");
 
   const internalUrl = await minio.presignedPutObject(env.MINIO_BUCKET, objectKey, 60 * 10);
-  const urlObj = new URL(internalUrl);
-  const publicBase = new URL(env.MINIO_PUBLIC_URL);
-  urlObj.protocol = publicBase.protocol;
-  urlObj.host = publicBase.host;
-  const url = urlObj.toString();
+  const url = toPublicMinioUrl(internalUrl);
 
   return res.json({ objectKey, presignedPutUrl: url, expiresInSeconds: 600 });
 });
@@ -69,14 +75,17 @@ documentsRouter.post("/complete", requireAuth, async (req, res) => {
 
 documentsRouter.get("/", requireAuth, async (req, res) => {
   const q = z.string().optional().parse(req.query.q);
-  const params: any[] = [req.auth!.userId];
+  const params: any[] = [];
   let sql =
-    "SELECT id,title,description,mime,size,sha256,object_key,status,created_at FROM documents WHERE owner_id=$1";
+    `SELECT d.id, d.title, d.description, d.mime, d.size, d.status, d.created_at,
+            u.display_name AS uploader_name, u.email AS uploader_email
+     FROM documents d
+     LEFT JOIN users u ON u.id = d.owner_id`;
   if (q && q.trim()) {
     params.push(`%${q.trim()}%`);
-    sql += " AND (title ILIKE $2 OR description ILIKE $2)";
+    sql += " WHERE (d.title ILIKE $1 OR d.description ILIKE $1)";
   }
-  sql += " ORDER BY created_at DESC LIMIT 50";
+  sql += " ORDER BY d.created_at DESC LIMIT 100";
   const result = await pool.query(sql, params);
   return res.json({ documents: result.rows });
 });
@@ -84,19 +93,13 @@ documentsRouter.get("/", requireAuth, async (req, res) => {
 documentsRouter.get("/:id/download", requireAuth, async (req, res) => {
   await ensureBucket();
   const id = z.string().uuid().parse(req.params.id);
-  const result = await pool.query("SELECT object_key FROM documents WHERE id=$1 AND owner_id=$2", [
-    id,
-    req.auth!.userId,
-  ]);
+  // Any authenticated user can download any document (shared)
+  const result = await pool.query("SELECT object_key FROM documents WHERE id=$1", [id]);
   const row = result.rows[0];
   if (!row) return res.status(404).json({ error: "not_found" });
 
   const internalUrl = await minio.presignedGetObject(env.MINIO_BUCKET, row.object_key, 60 * 10);
-  const urlObj = new URL(internalUrl);
-  const publicBase = new URL(env.MINIO_PUBLIC_URL);
-  urlObj.protocol = publicBase.protocol;
-  urlObj.host = publicBase.host;
-  const url = urlObj.toString();
+  const url = toPublicMinioUrl(internalUrl);
   return res.json({ presignedGetUrl: url, expiresInSeconds: 600 });
 });
 
