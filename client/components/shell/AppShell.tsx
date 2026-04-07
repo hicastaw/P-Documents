@@ -109,7 +109,7 @@ export function AppShell(props: {
             {/* ── Main ── */}
             <section className="min-w-0">
               {/* Topbar */}
-              <header className="rounded-2xl border border-white/70 bg-white/70 shadow-[0_8px_32px_-16px_rgba(2,6,23,0.18)] backdrop-blur-xl">
+              <header className="relative z-50 rounded-2xl border border-white/70 bg-white/70 shadow-[0_8px_32px_-16px_rgba(2,6,23,0.18)] backdrop-blur-xl">
                 <div className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0">
                     <div className="text-lg font-bold leading-6 text-slate-900">{props.title}</div>
@@ -121,7 +121,9 @@ export function AppShell(props: {
                     {props.search ? (
                       <div className="w-full sm:w-[320px]">{props.search}</div>
                     ) : null}
-                    <NotificationBell />
+                    <div className="relative z-50">
+                      <NotificationBell />
+                    </div>
                     {props.right}
                   </div>
                 </div>

@@ -109,3 +109,23 @@ INSERT INTO categories (name, slug) VALUES
   ('Báo cáo', 'bao_cao'),
   ('Khác', 'khac')
 ON CONFLICT (slug) DO NOTHING;
+
+-- ==========================================
+-- DỮ LIỆU MẪU (Dành cho việc kiểm thử)
+-- ==========================================
+DO $$ 
+DECLARE 
+    sys_user_id uuid := '00000000-0000-0000-0000-000000000001';
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM users WHERE id = sys_user_id) THEN
+        -- 1. Tạo 1 User mẫu
+        INSERT INTO users (id, email, password_hash, display_name) 
+        VALUES (sys_user_id, 'system@pdocs.local', 'fake_hash', 'Hệ Thống PDOCS');
+        
+        -- 2. Tạo 3 Quizzes mẫu
+        INSERT INTO quizzes (title, subject, questions, created_by) VALUES 
+        ('Kiến thức lập trình cơ bản', 'Công nghệ', '[{"q": "HTTP là viết tắt của gì?", "options": ["HyperText Transfer Protocol", "High Tech Transfer Protocol", "Hyper Transfer Technology Protocol", "None"], "correct": "HyperText Transfer Protocol"}, {"q": "Ngôn ngữ nào được dùng để tạo trang web?", "options": ["HTML", "SQL", "Python", "Java"], "correct": "HTML"}, {"q": "CSS là gì?", "options": ["Cascading Style Sheets", "Computer Style Syntax", "Creative Style System", "None"], "correct": "Cascading Style Sheets"}]'::jsonb, sys_user_id),
+        ('Lịch sử Việt Nam', 'Lịch sử', '[{"q": "Nước Cộng hòa Xã hội chủ nghĩa Việt Nam được thành lập năm nào?", "options": ["1975", "1976", "1954", "1945"], "correct": "1976"}, {"q": "Thủ đô của Việt Nam là gì?", "options": ["Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Huế"], "correct": "Hà Nội"}, {"q": "Ai là Chủ tịch nước đầu tiên của Việt Nam?", "options": ["Hồ Chí Minh", "Võ Nguyên Giáp", "Lê Duẩn", "Trường Chinh"], "correct": "Hồ Chí Minh"}]'::jsonb, sys_user_id),
+        ('Toán học phổ thông', 'Toán học', '[{"q": "Đạo hàm của x² là gì?", "options": ["2x", "x", "x²", "2"], "correct": "2x"}, {"q": "Tổng các góc trong một tam giác bằng bao nhiêu độ?", "options": ["180°", "360°", "90°", "270°"], "correct": "180°"}, {"q": "√144 = ?", "options": ["12", "14", "11", "13"], "correct": "12"}]'::jsonb, sys_user_id);
+    END IF;
+END $$;

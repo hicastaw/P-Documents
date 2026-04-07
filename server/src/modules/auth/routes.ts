@@ -74,6 +74,7 @@ authRouter.post("/logout", requireAuth, async (req: Request, res: Response) => {
 authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
   const result = await pool.query("SELECT id,email,display_name,created_at FROM users WHERE id=$1", [req.auth!.userId]);
   const user = result.rows[0];
+  if (!user) return res.status(401).json({ error: "user_not_found" });
   return res.json({ user });
 });
 

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { AppShell } from "../components/shell/AppShell";
 import { API_BASE, apiJsonAuth, authHeader, getAccessToken } from "../lib/api";
 import { useRequireAuth } from "../lib/use-require-auth";
@@ -50,8 +52,7 @@ export default function ChatPage() {
         setError("Không thể nhận trả lời từ AI. Vui lòng thử lại.");
         return;
       }
-      // Render markdown-lite: bold **text**
-      const answer = (j.answer ?? "(không có câu trả lời)").replace(/\*\*(.*?)\*\*/g, "$1");
+      const answer = j.answer ?? "(không có câu trả lời)";
       setMessages((m) => [...m, { role: "ai" as const, text: answer }]);
     } catch {
       setError("Mất kết nối. Vui lòng kiểm tra đường truyền.");
@@ -99,13 +100,47 @@ export default function ChatPage() {
                 </div>
                 <div
                   className={[
-                    "max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                    "max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
                     msg.role === "user"
                       ? "rounded-tr-sm bg-rose-600 text-white"
-                      : "rounded-tl-sm bg-slate-100 text-slate-900",
+                      : "rounded-tl-sm bg-slate-100 text-slate-800 shadow-sm border border-slate-200/60 break-words",
                   ].join(" ")}
                 >
-                  {msg.text}
+                  {msg.role === "user" ? (
+                    msg.text
+                  ) : (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        p: ({ node, ...props }: any) => <p className="mb-2.5 last:mb-0 leading-relaxed" {...props} />,
+                        ul: ({ node, ...props }: any) => <ul className="mb-3 list-disc pl-5 space-y-1" {...props} />,
+                        ol: ({ node, ...props }: any) => <ol className="mb-3 list-decimal pl-5 space-y-1" {...props} />,
+                        li: ({ node, ...props }: any) => <li className="pl-1" {...props} />,
+                        strong: ({ node, ...props }: any) => <strong className="font-semibold text-slate-900" {...props} />,
+                        h3: ({ node, ...props }: any) => <h3 className="mb-2 mt-4 text-sm font-bold text-slate-900" {...props} />,
+                        h4: ({ node, ...props }: any) => <h4 className="mb-1 mt-3 text-sm font-semibold text-slate-800" {...props} />,
+                        code: ({ node, className, children, ...props }: any) => {
+                          const match = /language-(\w+)/.exec(className || "");
+                          return !match ? (
+                            <code className="rounded bg-slate-200/70 px-1.5 py-0.5 text-[13px] font-mono text-rose-600" {...props}>
+                              {children}
+                            </code>
+                          ) : (
+                            <div className="my-3 overflow-hidden rounded-xl bg-slate-800 text-slate-50 border border-slate-700">
+                              <div className="bg-slate-900/50 px-4 py-1.5 text-xs text-slate-400 font-mono flex items-center">{match[1]}</div>
+                              <pre className="overflow-x-auto p-4 text-[13px] leading-snug">
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              </pre>
+                            </div>
+                          );
+                        },
+                      }}
+                    >
+                      {msg.text}
+                    </ReactMarkdown>
+                  )}
                 </div>
               </div>
             ))}
