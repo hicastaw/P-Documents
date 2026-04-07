@@ -104,7 +104,10 @@ quizRouter.get("/:id", requireAuth, async (req: Request, res: Response) => {
 
 quizRouter.post("/:id/submit", requireAuth, async (req: Request, res: Response) => {
   const quizId = z.string().uuid().parse(req.params.id);
-  const body = z.object({ answers: z.any() }).parse(req.body);
+  const body = z.object({
+    answers: z.any(),
+    timeTakenSeconds: z.number().int().min(0).max(9999).optional(),
+  }).parse(req.body);
 
   const q = await pool.query("SELECT questions FROM quizzes WHERE id=$1", [quizId]);
   if (!q.rows[0]) return res.status(404).json({ error: "not_found" });
@@ -118,22 +121,53 @@ quizRouter.post("/:id/submit", requireAuth, async (req: Request, res: Response) 
     if (qs[i] && "correct" in qs[i] && answers[i] === qs[i].correct) score += 1;
   }
 
-  const attempt = await pool.query(
-    "INSERT INTO quiz_attempts(quiz_id, user_id, answers, score) VALUES ($1,$2,$3,$4) RETURNING id,quiz_id,user_id,score,created_at",
-    [quizId, req.auth!.userId, JSON.stringify(body.answers), score],
-  );
+  const timeTaken = body.timeTakenSeconds ?? 0;
 
-  await redis.zAdd(`leaderboard:${quizId}`, [{ score, value: req.auth!.userId }]);
+  const attempt = await pool.query(
+    "INSERT INTO quiz_attempts(quiz_id, user_id, answers, score, time_taken_seconds) VALUES ($1,$2,$3,$4,$5) RETURNING id,quiz_id,user_id,score,time_taken_seconds,created_at",
+    [quizId, req.auth!.userId, JSON.stringify(body.answers), score, timeTaken],
+  );
 
   const io = req.app.get("io");
   if (io) io.emit("leaderboard:update", { quizId, userId: req.auth!.userId, score });
 
-  return res.json({ attempt: attempt.rows[0] });
+  return res.json({ attempt: { ...attempt.rows[0], totalQuestions: qs.length } });
 });
 
+// Leaderboard: ALL attempts from ALL players, sorted by score desc then time asc (faster = better)
 quizRouter.get("/:id/leaderboard", requireAuth, async (req: Request, res: Response) => {
   const quizId = z.string().uuid().parse(req.params.id);
-  const top = await redis.zRangeWithScores(`leaderboard:${quizId}`, 0, 9, { REV: true });
-  return res.json({ leaderboard: top });
+
+  const result = await pool.query(
+    `SELECT a.id, a.score, a.time_taken_seconds, a.created_at,
+            u.id AS user_id, u.display_name, u.email
+     FROM quiz_attempts a
+     LEFT JOIN users u ON u.id = a.user_id
+     WHERE a.quiz_id = $1
+     ORDER BY a.score DESC, a.time_taken_seconds ASC, a.created_at ASC
+     LIMIT 20`,
+    [quizId],
+  );
+
+  const leaderboard = result.rows.map((r: any) => ({
+    attemptId: r.id,
+    userId: r.user_id,
+    score: r.score,
+    timeTaken: r.time_taken_seconds,
+    displayName: r.display_name || r.email || "Ẩn danh",
+    createdAt: r.created_at,
+  }));
+
+  return res.json({ leaderboard });
 });
+
+quizRouter.get("/:id/history", requireAuth, async (req: Request, res: Response) => {
+  const quizId = z.string().uuid().parse(req.params.id);
+  const result = await pool.query(
+    "SELECT id, quiz_id, score, time_taken_seconds, created_at FROM quiz_attempts WHERE quiz_id=$1 AND user_id=$2 ORDER BY created_at DESC LIMIT 20",
+    [quizId, req.auth!.userId],
+  );
+  return res.json({ attempts: result.rows });
+});
+
 

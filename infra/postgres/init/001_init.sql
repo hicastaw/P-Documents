@@ -62,6 +62,50 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   answers jsonb NOT NULL,
   score int NOT NULL,
+  time_taken_seconds int NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS forum_threads (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title text NOT NULL,
+  body text NOT NULL,
+  author_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS forum_posts (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  thread_id uuid NOT NULL REFERENCES forum_threads(id) ON DELETE CASCADE,
+  author_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body text NOT NULL,
+  parent_id uuid NULL REFERENCES forum_posts(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_forum_posts_thread ON forum_posts(thread_id);
+CREATE INDEX IF NOT EXISTS idx_forum_posts_parent ON forum_posts(parent_id);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type text NOT NULL,
+  title text NOT NULL,
+  body text NULL,
+  ref_id text NULL,
+  read boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, read, created_at DESC);
+
+-- Seed default categories
+INSERT INTO categories (name, slug) VALUES
+  ('Giáo trình', 'giao_trinh'),
+  ('Bài tập', 'bai_tap'),
+  ('Đề thi', 'de_thi'),
+  ('Tài liệu tham khảo', 'tai_lieu_tham_khao'),
+  ('Báo cáo', 'bao_cao'),
+  ('Khác', 'khac')
+ON CONFLICT (slug) DO NOTHING;

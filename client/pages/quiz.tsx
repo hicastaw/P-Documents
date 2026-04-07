@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { AppShell } from "../components/shell/AppShell";
 import { API_BASE, authHeader, getAccessToken } from "../lib/api";
@@ -14,7 +14,6 @@ type QuizListItem = {
 
 export default function QuizPage() {
   const auth = useRequireAuth();
-  const [token, setToken] = useState<string | null>(null);
   const [quizzes, setQuizzes] = useState<QuizListItem[]>([]);
   const [liveMsg, setLiveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,11 +21,10 @@ export default function QuizPage() {
   const [loading, setLoading] = useState(false);
   const [seeding, setSeeding] = useState(false);
 
-  const hdr = useMemo(() => authHeader(token), [token]);
+  function hdr() { return authHeader(getAccessToken()); }
 
   useEffect(() => {
     if (!auth) return;
-    setToken(getAccessToken());
     const socket = io({ path: "/socket.io" });
     socket.on("leaderboard:update", (evt: any) => {
       setLiveMsg(`🏆 Quiz cập nhật: ${evt.quizId?.slice(0, 8)} · Điểm ${evt.score}`);
@@ -47,7 +45,7 @@ export default function QuizPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/quiz`, { headers: hdr });
+      const res = await fetch(`${API_BASE}/quiz`, { headers: hdr() });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError("Không thể tải danh sách quiz. Vui lòng thử lại.");
@@ -64,7 +62,7 @@ export default function QuizPage() {
   async function seedQuizzes() {
     setSeeding(true);
     try {
-      const res = await fetch(`${API_BASE}/quiz/seed`, { method: "POST", headers: hdr });
+      const res = await fetch(`${API_BASE}/quiz/seed`, { method: "POST", headers: hdr() });
       if (res.ok) await loadQuizzes();
       else setError("Không thể tạo quiz mẫu.");
     } catch {

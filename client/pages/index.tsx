@@ -13,18 +13,25 @@ type Doc = {
   uploader_name: string | null;
 };
 
+type Stats = {
+  documents: number;
+  users: number;
+  quizzes: number;
+  quizAttempts: number;
+};
+
 export default function HomePage() {
   const auth = useRequireAuth();
   const { authState } = useAuth();
   const [recentDocs, setRecentDocs] = useState<Doc[]>([]);
-  const [docCount, setDocCount] = useState(0);
+  const [stats, setStats] = useState<Stats>({ documents: 0, users: 0, quizzes: 0, quizAttempts: 0 });
 
   useEffect(() => {
     if (!auth) return;
     apiJsonAuth<{ documents: Doc[] }>("/documents").then((j) => {
       setRecentDocs((j.documents ?? []).slice(0, 4));
-      setDocCount(j.documents?.length ?? 0);
     });
+    apiJsonAuth<Stats>("/stats").then((s) => setStats(s)).catch(() => {});
   }, [!!auth]);
 
   if (!auth) return null;
@@ -60,6 +67,14 @@ export default function HomePage() {
       cta: "Làm bài quiz",
     },
     {
+      href: "/forum",
+      icon: "💬",
+      color: "from-sky-500 to-blue-500",
+      title: "Diễn đàn",
+      desc: "Thảo luận, đặt câu hỏi và chia sẻ kiến thức với cộng đồng.",
+      cta: "Vào diễn đàn",
+    },
+    {
       href: "/profile",
       icon: "👤",
       color: "from-emerald-500 to-teal-500",
@@ -75,10 +90,10 @@ export default function HomePage() {
         {/* Stats Bar */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: "Tài liệu chia sẻ", value: docCount, icon: "📄" },
-            { label: "Người dùng hoạt động", value: "—", icon: "👥" },
-            { label: "Quiz đã tạo", value: "—", icon: "📝" },
-            { label: "Câu hỏi AI", value: "—", icon: "💬" },
+            { label: "Tài liệu chia sẻ", value: stats.documents, icon: "📄" },
+            { label: "Người dùng", value: stats.users, icon: "👥" },
+            { label: "Quiz đã tạo", value: stats.quizzes, icon: "📝" },
+            { label: "Bài làm quiz", value: stats.quizAttempts, icon: "💬" },
           ].map((s) => (
             <div
               key={s.label}
@@ -96,7 +111,7 @@ export default function HomePage() {
           <div className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
             Tính năng
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {FEATURES.map((f) => (
               <Link
                 key={f.href}

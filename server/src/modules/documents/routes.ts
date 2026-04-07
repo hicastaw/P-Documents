@@ -65,9 +65,22 @@ documentsRouter.post("/complete", requireAuth, async (req, res) => {
       mime: z.string().min(1),
       size: z.number().int().positive(),
       categoryId: z.string().uuid().optional(),
+      category: z.string().optional(),          // slug like "giao_trinh"
       sha256: z.string().optional(),
     })
     .parse(req.body);
+
+  // Resolve category: prefer categoryId (UUID), fall back to slug lookup
+  let resolvedCategoryId: string | null = body.categoryId ?? null;
+  if (!resolvedCategoryId && body.category) {
+    const catRow = await pool.query(
+      "SELECT id FROM categories WHERE slug = $1 LIMIT 1",
+      [body.category],
+    );
+    if (catRow.rows.length > 0) {
+      resolvedCategoryId = catRow.rows[0].id;
+    }
+  }
 
   const result = await pool.query(
     `INSERT INTO documents(owner_id, category_id, title, description, mime, size, sha256, object_key, status)
@@ -75,7 +88,7 @@ documentsRouter.post("/complete", requireAuth, async (req, res) => {
      RETURNING id, owner_id, title, object_key, status, created_at`,
     [
       req.auth!.userId,
-      body.categoryId ?? null,
+      resolvedCategoryId,
       body.title,
       body.description ?? null,
       body.mime,
@@ -95,10 +108,12 @@ documentsRouter.get("/", requireAuth, async (req, res) => {
   const q = z.string().optional().parse(req.query.q);
   const params: any[] = [];
   let sql =
-    `SELECT d.id, d.title, d.description, d.mime, d.size, d.status, d.created_at,
+    `SELECT d.id, d.title, d.description, d.mime, d.size, d.status, d.created_at, d.category_id,
+            c.slug AS category_slug, c.name AS category_name,
             u.display_name AS uploader_name, u.email AS uploader_email
      FROM documents d
-     LEFT JOIN users u ON u.id = d.owner_id`;
+     LEFT JOIN users u ON u.id = d.owner_id
+     LEFT JOIN categories c ON c.id = d.category_id`;
   if (q && q.trim()) {
     params.push(`%${q.trim()}%`);
     sql += " WHERE (d.title ILIKE $1 OR d.description ILIKE $1)";

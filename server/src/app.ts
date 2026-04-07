@@ -7,6 +7,9 @@ import { authRouter } from "./modules/auth/routes";
 import { documentsRouter } from "./modules/documents/routes";
 import { quizRouter } from "./modules/quiz/routes";
 import { chatRouter } from "./modules/chat/routes";
+import { forumRouter } from "./modules/forum/routes";
+import { notificationsRouter } from "./modules/notifications/routes";
+import { statsRouter } from "./modules/stats/routes";
 
 export function createApp() {
   const env = loadEnv();
@@ -27,6 +30,9 @@ export function createApp() {
   app.use("/documents", documentsRouter);
   app.use("/quiz", quizRouter);
   app.use("/chat", chatRouter);
+  app.use("/forum", forumRouter);
+  app.use("/notifications", notificationsRouter);
+  app.use("/stats", statsRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof ZodError) {
@@ -40,4 +46,3 @@ export function createApp() {
 
   return app;
 }
-

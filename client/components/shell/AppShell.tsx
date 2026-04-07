@@ -1,8 +1,10 @@
 import Link from "next/link";
 import Head from "next/head";
 import { useRouter } from "next/router";
-import { ReactNode, useMemo, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../lib/auth-context";
+import { API_BASE, apiJsonAuth, getAccessToken } from "../../lib/api";
+import { io, Socket } from "socket.io-client";
 
 type NavItem = { href: string; label: string; icon: ReactNode };
 
@@ -11,8 +13,19 @@ const NAV: NavItem[] = [
   { href: "/documents", label: "Tài liệu", icon: <DocIcon /> },
   { href: "/chat", label: "Chat AI", icon: <ChatIcon /> },
   { href: "/quiz", label: "Quiz", icon: <QuizIcon /> },
+  { href: "/forum", label: "Diễn đàn", icon: <ForumIcon /> },
   { href: "/profile", label: "Hồ sơ", icon: <UserIcon /> },
 ];
+
+type Notification = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  ref_id: string | null;
+  read: boolean;
+  created_at: string;
+};
 
 export function AppShell(props: {
   title: string;
@@ -108,6 +121,7 @@ export function AppShell(props: {
                     {props.search ? (
                       <div className="w-full sm:w-[320px]">{props.search}</div>
                     ) : null}
+                    <NotificationBell />
                     {props.right}
                   </div>
                 </div>
@@ -119,6 +133,143 @@ export function AppShell(props: {
         </div>
       </div>
     </>
+  );
+}
+
+/* ── Notification Bell ── */
+function NotificationBell() {
+  const { authState } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const socketRef = useRef<Socket | null>(null);
+
+  const userId = authState.status === "authenticated" ? authState.user.id : null;
+
+  const loadNotifications = useCallback(async () => {
+    if (!userId) return;
+    try {
+      const json = await apiJsonAuth<{ notifications: Notification[]; unreadCount: number }>("/notifications");
+      setNotifications(json.notifications ?? []);
+      setUnreadCount(json.unreadCount ?? 0);
+    } catch { /* ignore */ }
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    loadNotifications();
+
+    const socket = io({ path: "/socket.io" });
+    socket.on(`notify:${userId}`, () => {
+      loadNotifications();
+    });
+    socketRef.current = socket;
+    return () => { socket.disconnect(); };
+  }, [userId, loadNotifications]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  async function markAllRead() {
+    try {
+      await apiJsonAuth("/notifications/read-all", { method: "PATCH" });
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setUnreadCount(0);
+    } catch { /* ignore */ }
+  }
+
+  async function markRead(id: string) {
+    try {
+      await apiJsonAuth(`/notifications/${id}/read`, { method: "PATCH" });
+      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n));
+      setUnreadCount((c) => Math.max(0, c - 1));
+    } catch { /* ignore */ }
+  }
+
+  if (!userId) return null;
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="relative grid h-9 w-9 place-items-center rounded-xl border border-black/5 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition"
+        title="Thông báo"
+      >
+        <BellIcon />
+        {unreadCount > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white animate-fadeIn">
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-11 z-50 w-[340px] rounded-2xl border border-black/5 bg-white shadow-[0_16px_48px_-16px_rgba(2,6,23,0.3)] animate-fadeIn overflow-hidden">
+          <div className="flex items-center justify-between border-b border-black/5 px-4 py-3">
+            <div className="text-sm font-bold text-slate-800">Thông báo</div>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="text-xs font-medium text-rose-600 hover:text-rose-500 transition"
+              >
+                Đánh dấu đã đọc
+              </button>
+            )}
+          </div>
+          <div className="max-h-[360px] overflow-y-auto">
+            {notifications.length > 0 ? (
+              notifications.slice(0, 15).map((n) => (
+                <button
+                  key={n.id}
+                  onClick={() => {
+                    if (!n.read) markRead(n.id);
+                    if (n.ref_id && n.type.startsWith("forum")) {
+                      window.location.href = `/forum/${n.ref_id}`;
+                    }
+                    setOpen(false);
+                  }}
+                  className={[
+                    "flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50",
+                    !n.read ? "bg-rose-50/40" : "",
+                  ].join(" ")}
+                >
+                  <div className={[
+                    "mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs",
+                    !n.read ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400",
+                  ].join(" ")}>
+                    {n.type === "forum_reply" ? "💬" : n.type === "quiz" ? "📝" : "🔔"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className={["text-xs leading-snug", !n.read ? "font-semibold text-slate-900" : "text-slate-600"].join(" ")}>
+                      {n.title}
+                    </div>
+                    {n.body && (
+                      <div className="mt-0.5 text-[10px] text-slate-400 truncate">{n.body}</div>
+                    )}
+                    <div className="mt-0.5 text-[10px] text-slate-400">
+                      {getTimeAgo(n.created_at)}
+                    </div>
+                  </div>
+                  {!n.read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-rose-500" />}
+                </button>
+              ))
+            ) : (
+              <div className="py-8 text-center text-xs text-slate-400">
+                Không có thông báo nào
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -186,6 +337,18 @@ function SidebarUser() {
   );
 }
 
+function getTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "vừa xong";
+  if (mins < 60) return `${mins} phút trước`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs} giờ trước`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days} ngày trước`;
+  return new Date(dateStr).toLocaleDateString("vi-VN");
+}
+
 /* ── Icons ── */
 function HomeIcon() {
   return (
@@ -219,11 +382,27 @@ function QuizIcon() {
     </svg>
   );
 }
+function ForumIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M17 9H7M13 13H7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 3V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
 function UserIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M20 21a8 8 0 1 0-16 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
       <path d="M12 13a4 4 0 1 0-4-4 4 4 0 0 0 4 4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function BellIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

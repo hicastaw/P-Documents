@@ -13,7 +13,20 @@ type Doc = {
   created_at: string;
   uploader_name: string | null;
   uploader_email: string | null;
+  category_id: string | null;
+  category_slug: string | null;
+  category_name: string | null;
 };
+
+const CATEGORIES = [
+  { value: "", label: "Không phân loại" },
+  { value: "giao_trinh", label: "Giáo trình" },
+  { value: "bai_tap", label: "Bài tập" },
+  { value: "de_thi", label: "Đề thi" },
+  { value: "tai_lieu_tham_khao", label: "Tài liệu tham khảo" },
+  { value: "bao_cao", label: "Báo cáo" },
+  { value: "khac", label: "Khác" },
+];
 
 function fmtSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -51,10 +64,20 @@ export default function DocumentsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0); // 0-100
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toastTimer = useRef<any>(null);
+
+  // Filter state
+  const [filterCategory, setFilterCategory] = useState("");
+
+  // Upload form state
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [formTitle, setFormTitle] = useState("");
+  const [formCategory, setFormCategory] = useState("");
+  const [formDescription, setFormDescription] = useState("");
 
   useEffect(() => {
     if (!auth) return;
@@ -83,7 +106,7 @@ export default function DocumentsPage() {
     }
   }
 
-  async function upload(file: File) {
+  async function uploadWithMeta(file: File, title: string, category: string, description: string) {
     setError(null);
     setUploading(true);
     setUploadProgress(5);
@@ -116,7 +139,7 @@ export default function DocumentsPage() {
 
       if (!putRes.ok) {
         if (putRes.status === 413)
-          throw new Error("File quá lớn vượt quá giới hạn cho phép (tối đa 200 MB).");
+          throw new Error("File quá lớn vượt quá giới hạn cho phép (tối đa 500 MB).");
         throw new Error(`Lỗi server khi tải file (mã ${putRes.status}).`);
       }
 
@@ -127,14 +150,16 @@ export default function DocumentsPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           objectKey: p.objectKey,
-          title: file.name.replace(/\.[^/.]+$/, ""),
+          title: title || file.name.replace(/\.[^/.]+$/, ""),
+          description: description || undefined,
+          category: category || undefined,
           mime: file.type || "application/pdf",
           size: file.size,
         }),
       });
 
       setUploadProgress(100);
-      showToast(`✓ Đã tải lên "${file.name.replace(/\.[^/.]+$/, "")}" thành công!`);
+      showToast(`✓ Đã tải lên "${title || file.name}" thành công!`);
       await load();
     } catch (err: any) {
       const raw = err?.message ?? "unknown";
@@ -145,15 +170,34 @@ export default function DocumentsPage() {
     }
   }
 
+  function openUploadForm(file: File) {
+    setPendingFile(file);
+    setFormTitle(file.name.replace(/\.[^/.]+$/, ""));
+    setFormCategory("");
+    setFormDescription("");
+    setShowUploadForm(true);
+  }
+
+  function closeUploadForm() {
+    setShowUploadForm(false);
+    setPendingFile(null);
+  }
+
+  async function handleFormSubmit() {
+    if (!pendingFile) return;
+    closeUploadForm();
+    await uploadWithMeta(pendingFile, formTitle, formCategory, formDescription);
+  }
+
   const handleFiles = useCallback(
-    async (files: FileList | null) => {
+    (files: FileList | null) => {
       if (!files || files.length === 0) return;
       const file = files[0];
       if (!file.type.includes("pdf") && !file.name.toLowerCase().endsWith(".pdf")) {
         setError("Chỉ hỗ trợ file PDF.");
         return;
       }
-      await upload(file);
+      openUploadForm(file);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [auth]
@@ -172,9 +216,10 @@ export default function DocumentsPage() {
 
   const filtered = docs.filter(
     (d) =>
-      !q.trim() ||
-      d.title.toLowerCase().includes(q.toLowerCase()) ||
-      (d.uploader_name ?? "").toLowerCase().includes(q.toLowerCase())
+      (!filterCategory || d.category_slug === filterCategory) &&
+      (!q.trim() ||
+        d.title.toLowerCase().includes(q.toLowerCase()) ||
+        (d.uploader_name ?? "").toLowerCase().includes(q.toLowerCase()))
   );
 
   return (
@@ -182,21 +227,33 @@ export default function DocumentsPage() {
       title="Tài liệu"
       subtitle={`${docs.length} tài liệu được chia sẻ`}
       search={
-        <div className="relative">
-          <input
-            className="w-full rounded-xl border border-black/8 bg-white/90 px-4 py-2.5 pr-10 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-rose-300 focus:ring-4 focus:ring-rose-100 transition"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && load()}
-            placeholder="Tìm tài liệu hoặc người upload..."
-          />
-          <button
-            onClick={load}
-            disabled={loading}
-            className="absolute inset-y-0 right-2 grid place-items-center px-2 text-slate-400 hover:text-rose-500 transition"
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <input
+              className="w-full rounded-xl border border-black/8 bg-white/90 px-4 py-2.5 pr-10 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-rose-300 focus:ring-4 focus:ring-rose-100 transition"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && load()}
+              placeholder="Tìm tài liệu hoặc người upload..."
+            />
+            <button
+              onClick={load}
+              disabled={loading}
+              className="absolute inset-y-0 right-2 grid place-items-center px-2 text-slate-400 hover:text-rose-500 transition"
+            >
+              <SearchIcon />
+            </button>
+          </div>
+          <select
+            className="rounded-xl border border-black/8 bg-white/90 px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-100 transition sm:max-w-xs"
+            value={filterCategory}
+            onChange={(e) => setFilterCategory(e.target.value)}
           >
-            <SearchIcon />
-          </button>
+            <option value="">Tất cả danh mục</option>
+            {CATEGORIES.filter(c => c.value !== "").map(c => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
         </div>
       }
       right={
@@ -281,7 +338,7 @@ export default function DocumentsPage() {
             <div className="text-sm font-semibold text-slate-700">
               {dragOver ? "Thả file vào đây" : "Kéo thả file PDF hoặc click để chọn"}
             </div>
-            <div className="text-xs text-slate-400">Hỗ trợ PDF · Tối đa 200 MB</div>
+            <div className="text-xs text-slate-400">Hỗ trợ PDF · Tối đa 500 MB</div>
           </div>
         )}
 
@@ -310,6 +367,77 @@ export default function DocumentsPage() {
           </div>
         )}
       </div>
+
+      {/* Upload Form Modal */}
+      {showUploadForm && pendingFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-black/5 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-rose-600 to-rose-500 px-6 py-4">
+              <h3 className="text-lg font-bold text-white">📄 Thông tin tài liệu</h3>
+              <p className="text-xs text-rose-100 mt-0.5">{pendingFile.name} · {fmtSize(pendingFile.size)}</p>
+            </div>
+
+            <div className="p-6 grid gap-4">
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tiêu đề *</label>
+                <input
+                  type="text"
+                  value={formTitle}
+                  onChange={(e) => setFormTitle(e.target.value)}
+                  className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-100 transition"
+                  placeholder="Nhập tiêu đề tài liệu..."
+                  autoFocus
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Danh mục</label>
+                <select
+                  value={formCategory}
+                  onChange={(e) => setFormCategory(e.target.value)}
+                  className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-100 transition"
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Mô tả</label>
+                <textarea
+                  value={formDescription}
+                  onChange={(e) => setFormDescription(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none resize-none focus:border-rose-300 focus:ring-4 focus:ring-rose-100 transition"
+                  placeholder="Mô tả ngắn về tài liệu (tùy chọn)..."
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  onClick={closeUploadForm}
+                  className="flex-1 rounded-xl border border-black/8 bg-slate-50 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleFormSubmit}
+                  disabled={!formTitle.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-6px_rgba(225,29,72,0.6)] hover:from-rose-500 hover:to-rose-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <UploadIcon /> Tải lên
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
@@ -368,8 +496,15 @@ function DocCard({ doc }: { doc: Doc }) {
       </div>
 
       <div className="p-4">
-        <div className="truncate text-sm font-semibold text-slate-900" title={doc.title}>
-          {doc.title}
+        <div className="flex items-start justify-between gap-3">
+          <div className="truncate text-sm font-semibold text-slate-900" title={doc.title}>
+            {doc.title}
+          </div>
+          {doc.category_slug && (
+            <span className="shrink-0 inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 ring-1 ring-inset ring-rose-500/10">
+              {doc.category_name || CATEGORIES.find(c => c.value === doc.category_slug)?.label || doc.category_slug}
+            </span>
+          )}
         </div>
 
         {/* Meta row */}
