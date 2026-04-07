@@ -10,14 +10,32 @@ import { publishDocumentUploaded } from "../../queue/publisher";
 const env = loadEnv();
 export const documentsRouter = Router();
 
+/**
+ * Normalize a filename so it contains only URL-safe ASCII characters.
+ * This prevents double-encoding issues when the filename is embedded in
+ * an S3 presigned URL path (Vietnamese letters, spaces, etc. cause
+ * SignatureDoesNotMatch when proxied through nginx rewrite).
+ *
+ * The original title is preserved in the DB — only the object key is sanitized.
+ */
+function sanitizeFilename(name: string): string {
+  // 1. Unicode NFD decompose → strips diacritics (à → a, etc.)
+  const noDiacritics = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // 2. Replace spaces and unsafe chars with underscore
+  const safe = noDiacritics.replace(/[^a-zA-Z0-9._\-]/g, "_");
+  // 3. Collapse consecutive underscores
+  return safe.replace(/_+/g, "_").replace(/^_|_$/g, "");
+}
+
+/**
+ * Replace the internal MinIO base URL (http://minio:9000) with the public URL
+ * using plain string replace — NOT new URL() — to guarantee zero re-encoding
+ * of the path or query string, which would break the AWS Signature v4.
+ */
 function toPublicMinioUrl(internalUrl: string) {
-  const src = new URL(internalUrl);
-  const base = new URL(env.MINIO_PUBLIC_URL);
-  const prefix = base.pathname.replace(/\/+$/, "");
-  src.protocol = base.protocol;
-  src.host = base.host;
-  src.pathname = `${prefix}${src.pathname}`;
-  return src.toString();
+  const internalBase = `http://${env.MINIO_ENDPOINT}:${env.MINIO_PORT}`;
+  const publicBase = env.MINIO_PUBLIC_URL.replace(/\/+$/, "");
+  return internalUrl.replace(internalBase, publicBase);
 }
 
 documentsRouter.post("/presign", requireAuth, async (req, res) => {
@@ -30,12 +48,12 @@ documentsRouter.post("/presign", requireAuth, async (req, res) => {
     })
     .parse(req.body);
 
-  const objectKey = `${req.auth!.userId}/${uuidv4()}-${body.filename}`.replaceAll("..", ".");
+  const objectKey = `${req.auth!.userId}/${uuidv4()}-${sanitizeFilename(body.filename)}`.replaceAll("..", ".");
 
   const internalUrl = await minio.presignedPutObject(env.MINIO_BUCKET, objectKey, 60 * 10);
-  const url = toPublicMinioUrl(internalUrl);
+  const presignedPutUrl = toPublicMinioUrl(internalUrl);
 
-  return res.json({ objectKey, presignedPutUrl: url, expiresInSeconds: 600 });
+  return res.json({ objectKey, presignedPutUrl, expiresInSeconds: 600 });
 });
 
 documentsRouter.post("/complete", requireAuth, async (req, res) => {
@@ -93,13 +111,11 @@ documentsRouter.get("/", requireAuth, async (req, res) => {
 documentsRouter.get("/:id/download", requireAuth, async (req, res) => {
   await ensureBucket();
   const id = z.string().uuid().parse(req.params.id);
-  // Any authenticated user can download any document (shared)
   const result = await pool.query("SELECT object_key FROM documents WHERE id=$1", [id]);
   const row = result.rows[0];
   if (!row) return res.status(404).json({ error: "not_found" });
 
   const internalUrl = await minio.presignedGetObject(env.MINIO_BUCKET, row.object_key, 60 * 10);
-  const url = toPublicMinioUrl(internalUrl);
-  return res.json({ presignedGetUrl: url, expiresInSeconds: 600 });
+  const presignedGetUrl = toPublicMinioUrl(internalUrl);
+  return res.json({ presignedGetUrl, expiresInSeconds: 600 });
 });
-

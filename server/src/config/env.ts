@@ -4,7 +4,7 @@ const EnvSchema = z.object({
   NODE_ENV: z.string().default("development"),
 
   API_PORT: z.coerce.number().default(3000),
-  API_CORS_ORIGIN: z.string().default("http://localhost:8080"),
+  API_CORS_ORIGIN: z.string().default("http://localhost:8888"),
 
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
@@ -31,6 +31,10 @@ const EnvSchema = z.object({
     .default("false"),
 
   RABBITMQ_URL: z.string().default("amqp://guest:guest@rabbitmq:5672"),
+
+  // AI keys (optional)
+  FPT_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

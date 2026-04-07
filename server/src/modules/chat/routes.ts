@@ -1,92 +1,73 @@
+/**
+ * routes.ts — HTTP layer for the chat module.
+ *
+ * POST /chat
+ *   body: { question: string, documentId?: string }
+ *   → { answer, mode, citations }
+ *
+ * Errors are bubbled up to the global Express error handler in app.ts.
+ * FPT Cloud errors are identified by the "fpt:" prefix in the
+ * message so they can be mapped to user-friendly strings on the client.
+ */
+
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../auth/middleware";
-import { pool } from "../../db/pg";
+import { handleChat } from "./service";
 
 export const chatRouter = Router();
 
-chatRouter.post("/", requireAuth, async (req, res) => {
-  const body = z
-    .object({
-      // documentId is optional — if omitted, search across all docs
-      documentId: z.string().uuid().optional(),
-      question: z.string().min(1).max(2000),
-    })
-    .parse(req.body);
-
-  const keywords = body.question
-    .split(/\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 5);
-
-  let chunks: { content: string; chunk_index: number; document_id: string }[] = [];
-
-  if (body.documentId) {
-    // Search within specific document
-    if (keywords.length > 0) {
-      const like = `%${keywords[0]}%`;
-      const r = await pool.query(
-        `SELECT chunk_index, content, document_id
-         FROM doc_chunks
-         WHERE document_id=$1 AND content ILIKE $2
-         ORDER BY chunk_index ASC LIMIT 6`,
-        [body.documentId, like],
-      );
-      chunks = r.rows;
-    }
-    // Fallback: first chunks of the document
-    if (chunks.length === 0) {
-      const r = await pool.query(
-        `SELECT chunk_index, content, document_id
-         FROM doc_chunks
-         WHERE document_id=$1
-         ORDER BY chunk_index ASC LIMIT 4`,
-        [body.documentId],
-      );
-      chunks = r.rows;
-    }
-  } else {
-    // No documentId — search across all documents
-    if (keywords.length > 0) {
-      const like = `%${keywords[0]}%`;
-      const r = await pool.query(
-        `SELECT dc.chunk_index, dc.content, dc.document_id
-         FROM doc_chunks dc
-         WHERE dc.content ILIKE $1
-         ORDER BY dc.chunk_index ASC LIMIT 8`,
-        [like],
-      );
-      chunks = r.rows;
-    }
-    // Fallback global: latest chunks
-    if (chunks.length === 0) {
-      const r = await pool.query(
-        `SELECT dc.chunk_index, dc.content, dc.document_id
-         FROM doc_chunks dc
-         ORDER BY dc.document_id, dc.chunk_index ASC LIMIT 6`,
-      );
-      chunks = r.rows;
-    }
-  }
-
-  const context = chunks.map((c) => `[Đoạn #${c.chunk_index}] ${c.content}`).join("\n\n");
-
-  let answer: string;
-  if (chunks.length === 0) {
-    answer =
-      body.documentId
-        ? "Tài liệu này chưa được xử lý hoặc chưa có nội dung nào được trích xuất. Vui lòng đợi worker xử lý xong."
-        : "Chưa có tài liệu nào được xử lý trong hệ thống. Hãy upload PDF và đợi worker trích xuất nội dung.";
-  } else {
-    answer =
-      `**Câu hỏi:** ${body.question}\n\n` +
-      `**Nội dung liên quan tìm thấy:**\n\n${context}\n\n` +
-      `*(Hệ thống đang dùng keyword matching. Tích hợp AI sẽ được bật khi cấu hình OPENAI_API_KEY hoặc GEMINI_API_KEY.)*`;
-  }
-
-  return res.json({
-    answer,
-    citations: chunks.map((c) => ({ chunkIndex: c.chunk_index, documentId: c.document_id })),
-  });
+const ChatBodySchema = z.object({
+  // documentId is optional — if omitted, search across all docs
+  documentId: z.string().uuid().optional(),
+  question: z.string().min(1).max(2000),
 });
+
+chatRouter.post("/", requireAuth, async (req, res) => {
+  const body = ChatBodySchema.parse(req.body);
+
+  try {
+    const result = await handleChat({
+      question: body.question,
+      documentId: body.documentId,
+      userId: req.auth!.userId,
+    });
+
+    return res.json({
+      answer: result.answer,
+      mode: result.mode,
+      citations: result.citations,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+
+    // Log for server-side debugging
+    console.error("[chat/routes] Unhandled chat error:", message);
+
+    // Distinguish FPT Cloud AI errors (code is "fpt:<CODE>:<httpStatus>")
+    if (message.startsWith("fpt:")) {
+      const [, code, httpStatus] = message.split(":");
+      return res.status(502).json({
+        error: "ai_error",
+        code,
+        httpStatus: httpStatus ? Number(httpStatus) : undefined,
+        message: friendlyFptError(code),
+      });
+    }
+
+    return res.status(500).json({ error: "internal_error", message });
+  }
+});
+
+function friendlyFptError(code: string): string {
+  switch (code) {
+    case "NETWORK_ERROR":
+      return "Không thể kết nối đến dịch vụ AI của FPT Cloud. Vui lòng thử lại sau.";
+    case "API_ERROR":
+      return "Dịch vụ FPT Cloud AI trả về lỗi. Kiểm tra FPT_API_KEY và hạn mức sử dụng.";
+    case "INVALID_RESPONSE":
+      return "Định dạng phản hồi từ FPT Cloud AI không hợp lệ.";
+    default:
+      return "Lỗi không xác định từ dịch vụ FPT Cloud AI.";
+  }
+}
