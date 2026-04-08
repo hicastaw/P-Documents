@@ -93,9 +93,22 @@ async function processDocument(documentId: string) {
   await redis.incr(`trust:${doc.owner_id ?? "unknown"}`);
 }
 
+async function connectWithRetry(url: string, retries = 5) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await amqp.connect(url);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn(`AMQP connection failed, retrying in 2s... (${i + 1}/${retries})`);
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+  }
+  throw new Error("Failed to connect to AMQP");
+}
+
 async function main() {
   await redis.connect();
-  const conn = await amqp.connect(env.RABBITMQ_URL);
+  const conn = await connectWithRetry(env.RABBITMQ_URL);
   const ch = await conn.createChannel();
   await ch.assertQueue(QUEUE, { durable: true });
   ch.prefetch(1);
@@ -127,4 +140,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
