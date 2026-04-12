@@ -69,7 +69,7 @@ async function processDocument(documentId: string) {
   // Dedup: if sha256 already exists in another document, reject
   const existing = await pool.query("SELECT id FROM documents WHERE sha256=$1 AND id<>$2", [sha256, documentId]);
   if (existing.rows[0]) {
-    await pool.query("UPDATE documents SET sha256=$1, status='rejected' WHERE id=$2", [sha256, documentId]);
+    await pool.query("UPDATE documents SET status='rejected' WHERE id=$1", [documentId]);
     return;
   }
 
