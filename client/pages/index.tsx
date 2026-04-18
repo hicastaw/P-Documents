@@ -160,10 +160,10 @@ export default function HomePage() {
                   <span
                     className={[
                       "shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-semibold",
-                      d.status === "ready" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700",
+                      d.status === "approved" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700",
                     ].join(" ")}
                   >
-                    {d.status === "ready" ? "Sẵn sàng" : "Đã upload"}
+                    {d.status === "approved" ? "Sẵn sàng" : "Đã upload"}
                   </span>
                 </div>
               ))}

@@ -17,8 +17,8 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/node": "^20.14.10",
     "@types/amqplib": "^0.10.6",
+    "@types/node": "^20.19.39",
     "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.11.10",
     "nodemon": "^3.1.4",
@@ -26,4 +26,3 @@
     "typescript": "^5.5.4"
   }
 }
-

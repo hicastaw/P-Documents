@@ -119,7 +119,7 @@ export function AppShell(props: {
                   </div>
                   <div className="flex items-center gap-2">
                     {props.search ? (
-                      <div className="w-full sm:w-[320px]">{props.search}</div>
+                      <div className="w-full sm:w-[500px]">{props.search}</div>
                     ) : null}
                     <div className="relative z-50">
                       <NotificationBell />

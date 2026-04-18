@@ -16,6 +16,9 @@ type Doc = {
   category_id: string | null;
   category_slug: string | null;
   category_name: string | null;
+  stars: number;
+  downloads: number;
+  is_starred: boolean;
 };
 
 const CATEGORIES = [
@@ -72,6 +75,12 @@ export default function DocumentsPage() {
   // Filter state
   const [filterCategory, setFilterCategory] = useState("");
 
+  // Detail Modal state
+  const [activeDoc, setActiveDoc] = useState<Doc | null>(null);
+  // Track which docs the current user has starred (populated from API response)
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
+  const [starLoading, setStarLoading] = useState(false);
+
   // Upload form state
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -99,6 +108,12 @@ export default function DocumentsPage() {
         `/documents?q=${encodeURIComponent(q)}`
       );
       setDocs(json.documents ?? []);
+      // Initialize starred IDs
+      const starred = new Set<string>();
+      (json.documents ?? []).forEach(d => {
+        if (d.is_starred) starred.add(d.id);
+      });
+      setStarredIds(starred);
     } catch {
       setError("Không thể tải danh sách tài liệu. Vui lòng thử lại.");
     } finally {
@@ -358,7 +373,7 @@ export default function DocumentsPage() {
         ) : filtered.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((d) => (
-              <DocCard key={d.id} doc={d} />
+              <DocCard key={d.id} doc={d} onOpen={() => setActiveDoc(d)} />
             ))}
           </div>
         ) : (
@@ -438,11 +453,149 @@ export default function DocumentsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Document Details Modal ── */}
+      {activeDoc && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm animate-fadeIn">
+          <div
+            className="fixed inset-0"
+            onClick={() => setActiveDoc(null)}
+          />
+          <div className="relative w-full max-w-xl rounded-3xl bg-white shadow-2xl animate-scaleIn">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-black/5 px-6 py-4">
+              <h3 className="text-base font-bold text-slate-800">Thông tin tài liệu</h3>
+              <button
+                onClick={() => setActiveDoc(null)}
+                className="grid h-8 w-8 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              >
+                ✕
+              </button>
+            </div>
+            {/* Content */}
+            <div className="px-6 py-6 space-y-5">
+              <div>
+                <div className="text-xl font-bold text-slate-900 leading-snug">{activeDoc.title}</div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-slate-500 font-medium">
+                  {activeDoc.category_slug && (
+                    <span className="rounded-md bg-rose-50 px-2 py-0.5 text-rose-600 ring-1 ring-inset ring-rose-500/10">
+                      {activeDoc.category_name || CATEGORIES.find(c => c.value === activeDoc.category_slug)?.label || activeDoc.category_slug}
+                    </span>
+                  )}
+                  <span>Đăng bởi: {activeDoc.uploader_name ?? activeDoc.uploader_email ?? "Ẩn danh"}</span>
+                  <span>Ngày: {fmtDate(activeDoc.created_at)}</span>
+                  <span>Kích thước: {fmtSize(activeDoc.size)}</span>
+                </div>
+              </div>
+
+              {activeDoc.description ? (
+                <div className="rounded-xl bg-slate-50 p-4 border border-slate-100">
+                  <div className="text-sm font-semibold text-slate-700 mb-1">Mô tả chi tiết:</div>
+                  <div className="text-sm text-slate-600 whitespace-pre-wrap">{activeDoc.description}</div>
+                </div>
+              ) : (
+                <div className="text-sm text-slate-400 italic">Tài liệu này không có mô tả chi tiết.</div>
+              )}
+
+              <div className="flex items-center gap-6 pt-2">
+                {/* Star block – clickable */}
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Đánh giá</span>
+                  <button
+                    disabled={starLoading || activeDoc.status !== 'approved'}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (!activeDoc) return;
+                      setStarLoading(true);
+                      console.log("Starring document:", activeDoc.id);
+                      try {
+                        const res = await fetch(`${API_BASE}/documents/${activeDoc.id}/star`, {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            ...(getAccessToken() ? { authorization: `Bearer ${getAccessToken()}` } : {})
+                          },
+                        });
+                        const j = await res.json();
+                        if (!res.ok) throw new Error(j.error || "star_failed");
+                        
+                        setStarredIds(prev => {
+                          const next = new Set(prev);
+                          if (j.starred) next.add(activeDoc.id); else next.delete(activeDoc.id);
+                          return next;
+                        });
+                        setActiveDoc(prev => prev ? { ...prev, stars: j.stars } : prev);
+                        setDocs(prev => prev.map(d => d.id === activeDoc.id ? { ...d, stars: j.stars } : d));
+                        console.log("Star toggle success:", j);
+                      } catch (err) {
+                        console.error("Star toggle failed:", err);
+                        alert("Không thể đánh giá tài liệu lúc này.");
+                      } finally {
+                        setStarLoading(false);
+                      }
+                    }}
+                    className={[
+                      "mt-0.5 flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold transition-all active:scale-95 border-2",
+                      starredIds.has(activeDoc.id)
+                        ? "bg-amber-400 text-white border-amber-400 shadow-md hover:bg-amber-500 hover:border-amber-500"
+                        : "bg-white text-amber-500 border-amber-500/30 hover:bg-amber-50 hover:border-amber-500/50",
+                      (starLoading || activeDoc.status !== 'approved') && "opacity-50 cursor-not-allowed",
+                    ].filter(Boolean).join(" ")}
+                  >
+                    <StarIconFilled filled={starredIds.has(activeDoc.id)} />
+                    {starredIds.has(activeDoc.id) ? "Đã Star" : "Star"} · {activeDoc.stars}
+                  </button>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Lượt tải</span>
+                  <div className="text-base font-bold text-slate-700 flex items-center gap-1.5 mt-0.5">
+                    <DownloadSmallIcon /> {activeDoc.downloads} lượt
+                  </div>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Trạng thái</span>
+                  <div className="text-sm font-bold text-emerald-600 mt-1">
+                     {activeDoc.status === 'approved' ? '✓ Đã xử lý AI' : '... Đang xử lý'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center gap-3 border-t border-black/5 bg-slate-50 px-6 py-4 rounded-b-3xl">
+              <button
+                onClick={() => setActiveDoc(null)}
+                className="flex-1 rounded-xl border border-black/8 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
+              >
+                Đóng
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`${API_BASE}/documents/${activeDoc.id}/download`, {
+                      headers: getAccessToken() ? { authorization: `Bearer ${getAccessToken()}` } : {},
+                    });
+                    const j = await res.json();
+                    if (!res.ok) throw new Error();
+                    window.open(j.presignedGetUrl, "_blank");
+                  } catch {
+                    alert("Không thể tải xuống.");
+                  }
+                }}
+                disabled={activeDoc.status !== 'approved'}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-4 py-2.5 text-sm font-semibold text-white shadow shadow-rose-200 hover:from-rose-500 hover:to-rose-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <DownloadSmallIcon /> Tải tài liệu ngay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppShell>
   );
 }
 
-function DocCard({ doc }: { doc: Doc }) {
+function DocCard({ doc, onOpen }: { doc: Doc; onOpen?: () => void }) {
   const [downloading, setDownloading] = useState(false);
   const [dlError, setDlError] = useState<string | null>(null);
 
@@ -470,18 +623,21 @@ function DocCard({ doc }: { doc: Doc }) {
   const statusLabel: Record<string, string> = {
     uploaded: "Đã upload",
     processing: "Đang xử lý",
-    ready: "Sẵn sàng",
+    approved: "Sẵn sàng",
     error: "Lỗi",
   };
   const statusColor: Record<string, string> = {
     uploaded: "bg-sky-50 text-sky-700",
     processing: "bg-amber-50 text-amber-700",
-    ready: "bg-emerald-50 text-emerald-700",
+    approved: "bg-emerald-50 text-emerald-700",
     error: "bg-red-50 text-red-600",
   };
 
   return (
-    <div className="group overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_4px_24px_-12px_rgba(2,6,23,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-16px_rgba(2,6,23,0.28)]">
+    <div 
+      onClick={() => onOpen && onOpen()}
+      className="group overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_4px_24px_-12px_rgba(2,6,23,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-16px_rgba(2,6,23,0.28)] cursor-pointer"
+    >
       {/* Banner */}
       <div className="relative h-20 flex items-end p-3" style={{ background: banner }}>
         <div className="absolute inset-0 opacity-20 [background:radial-gradient(600px_120px_at_10%_10%,white,transparent)]" />
@@ -518,11 +674,17 @@ function DocCard({ doc }: { doc: Doc }) {
           <span className="shrink-0 text-xs text-slate-400">{fmtSize(doc.size)}</span>
         </div>
 
-        <div className="mt-1 text-[11px] text-slate-400">{fmtDate(doc.created_at)}</div>
+        <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+          <span>{fmtDate(doc.created_at)}</span>
+          <div className="flex gap-2.5 font-medium">
+            <span className="flex items-center gap-1 text-amber-500/80"><StarIcon /> {doc.stars}</span>
+            <span className="flex items-center gap-1"><DownloadSmallIcon /> {doc.downloads}</span>
+          </div>
+        </div>
 
         <div className="mt-3 flex items-center gap-2">
           <button
-            onClick={handleDownload}
+            onClick={(e) => { e.stopPropagation(); handleDownload(); }}
             disabled={downloading}
             className="flex items-center gap-1.5 rounded-xl border border-black/8 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white hover:border-rose-200 hover:text-rose-700 transition disabled:opacity-50"
           >
@@ -585,3 +747,30 @@ function SpinIcon() {
     </svg>
   );
 }
+
+function StarIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  );
+}
+
+function DownloadSmallIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden="true" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+       <polyline points="7 10 12 15 17 10" />
+       <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+  );
+}
+
+function StarIconFilled({ filled }: { filled: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? "white" : "none"} stroke={filled ? "white" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
