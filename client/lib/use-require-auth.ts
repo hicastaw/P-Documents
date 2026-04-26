@@ -17,7 +17,7 @@ export function useRequireAuth() {
   }, [authState.status, router]);
 
   if (authState.status === "authenticated") {
-    return { user: authState.user };
+    return authState.user;
   }
   return null;
 }

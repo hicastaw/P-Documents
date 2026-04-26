@@ -10,6 +10,7 @@ import { chatRouter } from "./modules/chat/routes";
 import { forumRouter } from "./modules/forum/routes";
 import { notificationsRouter } from "./modules/notifications/routes";
 import { statsRouter } from "./modules/stats/routes";
+import { adminRouter } from "./modules/admin/routes";
 
 export function createApp() {
   const env = loadEnv();
@@ -33,6 +34,7 @@ export function createApp() {
   app.use("/forum", forumRouter);
   app.use("/notifications", notificationsRouter);
   app.use("/stats", statsRouter);
+  app.use("/admin", adminRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (err instanceof ZodError) {

@@ -81,6 +81,11 @@ export default function DocumentsPage() {
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set());
   const [starLoading, setStarLoading] = useState(false);
 
+  // Report Modal state
+  const [reportDoc, setReportDoc] = useState<Doc | null>(null);
+  const [reportReason, setReportReason] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
+
   // Upload form state
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -318,9 +323,9 @@ export default function DocumentsPage() {
 
         {/* Toast */}
         {toast && (
-          <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 animate-fadeIn">
-            <span className="shrink-0 text-emerald-500">✓</span>
-            {toast}
+          <div className="fixed bottom-8 right-8 z-[9999] flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800 shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fadeIn">
+            <span className="shrink-0 text-emerald-600">✨</span>
+            {toast.replace(/^✓\s*/, '')}
           </div>
         )}
 
@@ -564,6 +569,14 @@ export default function DocumentsPage() {
             {/* Footer */}
             <div className="flex items-center gap-3 border-t border-black/5 bg-slate-50 px-6 py-4 rounded-b-3xl">
               <button
+                onClick={() => { setReportDoc(activeDoc); setReportReason(""); }}
+                className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600 shadow-sm hover:bg-red-100 transition"
+                title="Báo cáo vi phạm"
+              >
+                <ReportIcon />
+                <span>Báo cáo</span>
+              </button>
+              <button
                 onClick={() => setActiveDoc(null)}
                 className="flex-1 rounded-xl border border-black/8 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
               >
@@ -587,6 +600,60 @@ export default function DocumentsPage() {
               >
                 <DownloadSmallIcon /> Tải tài liệu ngay
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Report Modal ── */}
+      {reportDoc && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl border border-black/5 overflow-hidden animate-scaleIn">
+            <div className="px-6 py-4 border-b border-black/5 flex items-center justify-between">
+              <h3 className="font-bold text-red-600 flex items-center gap-2">
+                <ReportIcon /> Báo cáo tài liệu
+              </h3>
+              <button onClick={() => setReportDoc(null)} className="text-slate-400 hover:text-slate-600 transition">✕</button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-slate-600 mb-3">Bạn đang báo cáo: <strong className="text-slate-800">{reportDoc.title}</strong></p>
+              <textarea
+                value={reportReason}
+                onChange={e => setReportReason(e.target.value)}
+                placeholder="Nhập lý do báo cáo (ví dụ: spam, sai danh mục, nội dung xấu...)"
+                rows={4}
+                className="w-full rounded-xl border border-black/10 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-red-300 focus:ring-4 focus:ring-red-100 transition resize-none"
+                autoFocus
+              />
+              <div className="mt-4 flex gap-3">
+                <button onClick={() => setReportDoc(null)} className="flex-1 rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 transition">Hủy</button>
+                <button
+                  disabled={reportLoading || reportReason.trim().length < 5}
+                  onClick={async () => {
+                    setReportLoading(true);
+                    try {
+                      const res = await fetch(`${API_BASE}/documents/${reportDoc.id}/report`, {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          ...(getAccessToken() ? { authorization: `Bearer ${getAccessToken()}` } : {})
+                        },
+                        body: JSON.stringify({ reason: reportReason.trim() })
+                      });
+                      if (!res.ok) throw new Error();
+                      showToast("Đã gửi báo cáo thành công.");
+                      setReportDoc(null);
+                    } catch {
+                      alert("Không thể gửi báo cáo lúc này.");
+                    } finally {
+                      setReportLoading(false);
+                    }
+                  }}
+                  className="flex-1 flex justify-center items-center rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {reportLoading ? "Đang gửi..." : "Gửi báo cáo"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -770,6 +837,15 @@ function StarIconFilled({ filled }: { filled: boolean }) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill={filled ? "white" : "none"} stroke={filled ? "white" : "currentColor"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </svg>
+  );
+}
+
+function ReportIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+      <line x1="4" y1="22" x2="4" y2="15"></line>
     </svg>
   );
 }

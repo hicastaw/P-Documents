@@ -21,6 +21,15 @@ CREATE TABLE IF NOT EXISTS document_stars (
   PRIMARY KEY (user_id, document_id)
 );
 
+-- 3.1. Tạo bảng lưu report tài liệu
+CREATE TABLE IF NOT EXISTS document_reports (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  document_id uuid NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+  reason      text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+
 -- 4. Đổi cột embedding của doc_chunks từ jsonb → vector(1024)
 --    (1024 chiều = kích thước của FPT.AI-e5-large / FPT.AI-gte-base)
 --    Ghi chú: OpenAI text-embedding-3-small là 1536, FPT.AI-e5-large là 1024

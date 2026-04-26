@@ -35,6 +35,7 @@ export function AppShell(props: {
   search?: ReactNode;
 }) {
   const router = useRouter();
+  const { authState } = useAuth();
   const activeHref = useMemo(() => {
     const p = router.asPath || "/";
     if (p === "/") return "/";
@@ -51,9 +52,9 @@ export function AppShell(props: {
         <div className="mx-auto max-w-[1440px] px-4 py-5 lg:px-6">
           <div className="grid gap-4 lg:grid-cols-[256px_1fr]">
             {/* ── Sidebar ── */}
-            <aside className="flex flex-col rounded-2xl border border-white/70 bg-white/70 shadow-[0_8px_32px_-16px_rgba(2,6,23,0.18)] backdrop-blur-xl lg:sticky lg:top-5 lg:max-h-[calc(100vh-40px)]">
+            <aside className="flex flex-col rounded-2xl border border-white/70 bg-white/70 shadow-[0_8px_32px_-16px_rgba(2,6,23,0.18)] backdrop-blur-xl lg:sticky lg:top-5 self-start">
               {/* Brand */}
-              <div className="px-5 pt-5">
+              <div className="px-5 pt-5 flex-shrink-0">
                 <Link href="/" className="flex items-center gap-3 group">
                   <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-rose-600 to-rose-500 text-white shadow-[0_8px_18px_-8px_rgba(225,29,72,0.6)] transition group-hover:shadow-[0_10px_22px_-8px_rgba(225,29,72,0.75)]">
                     <span className="text-sm font-bold tracking-wide">PD</span>
@@ -99,11 +100,45 @@ export function AppShell(props: {
                 </nav>
               </div>
 
-              {/* Spacer */}
-              <div className="flex-1" />
+              {/* Small Spacer */}
+              <div className="h-4 flex-shrink-0" />
 
-              {/* User block */}
-              <SidebarUser />
+              {/* Bottom Section */}
+              <div className="flex-shrink-0">
+                {authState.status === "authenticated" && authState.user.role === "admin" && (
+                  <div className="border-t border-black/5 px-4 pt-4 pb-1">
+                    <Link
+                      href="/admin"
+                      className={[
+                        "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+                        activeHref === "/admin"
+                          ? "bg-rose-50 text-rose-700 shadow-[inset_0_0_0_1px_rgba(244,63,94,0.2)]"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+                      ].join(" ")}
+                    >
+                      <span
+                        className={[
+                          "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition",
+                          activeHref === "/admin"
+                            ? "bg-white text-rose-600 shadow-sm"
+                            : "text-slate-400 group-hover:text-slate-600",
+                        ].join(" ")}
+                      >
+                        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </span>
+                      Quản trị (Admin)
+                      {activeHref === "/admin" && (
+                        <span className="ml-auto h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      )}
+                    </Link>
+                  </div>
+                )}
+
+                {/* User block */}
+                <SidebarUser />
+              </div>
             </aside>
 
             {/* ── Main ── */}
