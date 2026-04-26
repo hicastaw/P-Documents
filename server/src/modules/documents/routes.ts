@@ -394,3 +394,31 @@ documentsRouter.post("/:id/star", requireAuth, async (req, res) => {
     stars: updatedDoc.rows[0]?.stars ?? 0,
   });
 });
+
+// ─── Report Route ──────────────────────────────────────────────────────────
+
+/**
+ * POST /documents/:id/report
+ * Gửi báo cáo vi phạm cho tài liệu
+ */
+documentsRouter.post("/:id/report", requireAuth, async (req, res) => {
+  const documentId = z.string().uuid().parse(req.params.id);
+  const userId = req.auth!.userId;
+  const { reason } = z.object({ reason: z.string().min(5) }).parse(req.body);
+
+  // Kiểm tra document có tồn tại không
+  const docCheck = await pool.query(
+    "SELECT id FROM documents WHERE id=$1 AND status='approved'",
+    [documentId],
+  );
+  if (!docCheck.rows[0]) {
+    return res.status(404).json({ error: "not_found" });
+  }
+
+  await pool.query(
+    "INSERT INTO document_reports(user_id, document_id, reason) VALUES ($1, $2, $3)",
+    [userId, documentId, reason],
+  );
+
+  return res.json({ success: true });
+});
