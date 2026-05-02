@@ -1,10 +1,11 @@
 /**
  * service.ts — Chat business logic: retrieval + FPT Cloud AI call.
  *
- * Retrieval strategy (simple keyword-based, no vector DB needed):
- *   1. Tokenize the question into ≤5 keywords.
- *   2. Build a PostgreSQL ILIKE query across doc_chunks.content.
- *   3. Fallback to first N chunks if nothing matched.
+ * Retrieval strategy (Hybrid Search):
+ *   1. Gọi FPT AI Embedding API để biến câu hỏi thành vector.
+ *   2. Nếu có vector → Vector Similarity Search (cosine distance qua pgvector).
+ *   3. Nếu không có vector → fallback ILIKE keyword search trên doc_chunks.content.
+ *   4. Nếu không có chunk nào → fallback lấy N chunk đầu của tài liệu.
  *
  * The retrieved chunks are injected into the prompt via prompts.ts.
  */
@@ -16,8 +17,36 @@ import { loadEnv } from "../../config/env";
 
 const env = loadEnv();
 
-const MAX_KEYWORD_CHUNKS = 8; // chunks returned by keyword search
+const MAX_VECTOR_CHUNKS = 8;  // chunks returned by vector similarity search
+const MAX_KEYWORD_CHUNKS = 8; // chunks returned by keyword search (ILIKE fallback)
 const MAX_FALLBACK_CHUNKS = 5; // chunks returned when no keyword match
+
+/**
+ * Gọi FPT AI Embedding để lấy vector của câu hỏi.
+ * Trả về null nếu không có API key hoặc thất bại.
+ */
+async function getQuestionEmbedding(question: string): Promise<number[] | null> {
+  const apiKey = env.FPT_API_KEY;
+  if (!apiKey || !question.trim()) return null;
+  try {
+    const resp = await fetch("https://mkp-api.fptcloud.com/embeddings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "Vietnamese_Embedding",
+        input: [question.slice(0, 8000)],
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as { data: { embedding: number[] }[] };
+    return data.data?.[0]?.embedding ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export interface ChatChunk {
   chunk_index: number;
@@ -114,8 +143,51 @@ export async function handleChat(opts: {
   }
 }
 
-/** Keyword-based retrieval from doc_chunks. */
+/**
+ * Hybrid retrieval từ doc_chunks.
+ *
+ * Ưu tiên:
+ *   1. Vector Similarity Search (cosine) — nếu câu hỏi có embedding
+ *   2. ILIKE keyword search             — nếu không có embedding
+ *   3. Lấy N chunk đầu của tài liệu    — nếu cả 2 không có kết quả
+ */
 async function retrieveChunks(question: string, documentId?: string): Promise<ChatChunk[]> {
+  // ── Bước 1: Thử lấy embedding của câu hỏi ────────────────────────────────
+  const questionVector = await getQuestionEmbedding(question);
+
+  // ── Bước 2: Vector Similarity Search (nếu có embedding) ──────────────────
+  if (questionVector) {
+    const vectorStr = `[${questionVector.join(",")}]`;
+
+    if (documentId) {
+      const r = await pool.query(
+        `SELECT chunk_index, content, document_id,
+                1 - (embedding <=> $1::vector) AS similarity
+         FROM doc_chunks
+         WHERE document_id = $2
+           AND embedding IS NOT NULL
+         ORDER BY embedding <=> $1::vector ASC
+         LIMIT $3`,
+        [vectorStr, documentId, MAX_VECTOR_CHUNKS],
+      );
+      if (r.rows.length > 0) return r.rows;
+    } else {
+      const r = await pool.query(
+        `SELECT dc.chunk_index, dc.content, dc.document_id,
+                1 - (dc.embedding <=> $1::vector) AS similarity
+         FROM doc_chunks dc
+         INNER JOIN documents d ON d.id = dc.document_id
+         WHERE dc.embedding IS NOT NULL
+           AND d.status = 'approved'
+         ORDER BY dc.embedding <=> $1::vector ASC
+         LIMIT $2`,
+        [vectorStr, MAX_VECTOR_CHUNKS],
+      );
+      if (r.rows.length > 0) return r.rows;
+    }
+  }
+
+  // ── Bước 3: Fallback — ILIKE keyword search ───────────────────────────────
   const keywords = question
     .split(/\s+/)
     .map((s) => s.trim())
@@ -125,7 +197,6 @@ async function retrieveChunks(question: string, documentId?: string): Promise<Ch
   let chunks: ChatChunk[] = [];
 
   if (documentId) {
-    // Search within a specific document
     if (keywords.length > 0) {
       const like = `%${keywords[0]}%`;
       const r = await pool.query(
@@ -137,8 +208,8 @@ async function retrieveChunks(question: string, documentId?: string): Promise<Ch
       );
       chunks = r.rows;
     }
+    // Fallback: first N chunks of the document
     if (chunks.length === 0) {
-      // Fallback: first N chunks of the document
       const r = await pool.query(
         `SELECT chunk_index, content, document_id
          FROM doc_chunks
@@ -149,13 +220,14 @@ async function retrieveChunks(question: string, documentId?: string): Promise<Ch
       chunks = r.rows;
     }
   } else {
-    // Search across all documents
     if (keywords.length > 0) {
       const like = `%${keywords[0]}%`;
       const r = await pool.query(
         `SELECT dc.chunk_index, dc.content, dc.document_id
          FROM doc_chunks dc
+         INNER JOIN documents d ON d.id = dc.document_id
          WHERE dc.content ILIKE $1
+           AND d.status = 'approved'
          ORDER BY dc.chunk_index ASC LIMIT $2`,
         [like, MAX_KEYWORD_CHUNKS],
       );
@@ -165,6 +237,8 @@ async function retrieveChunks(question: string, documentId?: string): Promise<Ch
       const r = await pool.query(
         `SELECT dc.chunk_index, dc.content, dc.document_id
          FROM doc_chunks dc
+         INNER JOIN documents d ON d.id = dc.document_id
+         WHERE d.status = 'approved'
          ORDER BY dc.document_id, dc.chunk_index ASC LIMIT $1`,
         [MAX_FALLBACK_CHUNKS],
       );
