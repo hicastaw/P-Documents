@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/shell/AppShell";
 import { apiJsonAuth } from "../lib/api";
@@ -21,6 +22,7 @@ type Stats = {
 };
 
 export default function HomePage() {
+  const router = useRouter();
   const auth = useRequireAuth();
   const { authState } = useAuth();
   const [recentDocs, setRecentDocs] = useState<Doc[]>([]);
@@ -28,11 +30,15 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!auth) return;
+    if (authState.status === "authenticated" && authState.user.role === "admin") {
+      router.replace("/admin");
+      return;
+    }
     apiJsonAuth<{ documents: Doc[] }>("/documents").then((j) => {
       setRecentDocs((j.documents ?? []).slice(0, 4));
     });
     apiJsonAuth<Stats>("/stats").then((s) => setStats(s)).catch(() => {});
-  }, [!!auth]);
+  }, [!!auth, authState.status, authState.user, router]);
 
   if (!auth) return null;
 

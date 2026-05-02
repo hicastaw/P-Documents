@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/router";
 import { AppShell } from "../components/shell/AppShell";
 import { API_BASE, apiJsonAuth, getAccessToken } from "../lib/api";
 import { useRequireAuth } from "../lib/use-require-auth";
@@ -61,6 +62,7 @@ function friendlyUploadError(msg: string): string {
 
 export default function DocumentsPage() {
   const auth = useRequireAuth();
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [docs, setDocs] = useState<Doc[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -95,9 +97,13 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     if (!auth) return;
+    if (auth.role === "admin") {
+      router.replace("/admin");
+      return;
+    }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [!!auth]);
+  }, [!!auth, auth.role, router]);
 
   function showToast(msg: string) {
     setToast(msg);

@@ -67,36 +67,37 @@ export function AppShell(props: {
 
                 {/* Nav */}
                 <nav className="mt-6 grid gap-0.5">
-                  {NAV.map((item) => {
-                    const isActive = item.href === activeHref;
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={[
-                          "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
-                          isActive
-                            ? "bg-rose-50 text-rose-700 shadow-[inset_0_0_0_1px_rgba(244,63,94,0.2)]"
-                            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-                        ].join(" ")}
-                      >
-                        <span
+                  {!(authState.status === "authenticated" && authState.user.role === "admin") && 
+                    NAV.map((item) => {
+                      const isActive = item.href === activeHref;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
                           className={[
-                            "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition",
+                            "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
                             isActive
-                              ? "bg-white text-rose-600 shadow-sm"
-                              : "text-slate-400 group-hover:text-slate-600",
+                              ? "bg-rose-50 text-rose-700 shadow-[inset_0_0_0_1px_rgba(244,63,94,0.2)]"
+                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
                           ].join(" ")}
                         >
-                          {item.icon}
-                        </span>
-                        {item.label}
-                        {isActive && (
-                          <span className="ml-auto h-1.5 w-1.5 rounded-full bg-rose-500" />
-                        )}
-                      </Link>
-                    );
-                  })}
+                          <span
+                            className={[
+                              "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition",
+                              isActive
+                                ? "bg-white text-rose-600 shadow-sm"
+                                : "text-slate-400 group-hover:text-slate-600",
+                            ].join(" ")}
+                          >
+                            {item.icon}
+                          </span>
+                          {item.label}
+                          {isActive && (
+                            <span className="ml-auto h-1.5 w-1.5 rounded-full bg-rose-500" />
+                          )}
+                        </Link>
+                      );
+                    })}
                 </nav>
               </div>
 
