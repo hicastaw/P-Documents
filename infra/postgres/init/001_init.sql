@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   email text UNIQUE NOT NULL,
   password_hash text NOT NULL,
   display_name text NOT NULL,
+  role text NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -119,8 +120,8 @@ DECLARE
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM users WHERE id = sys_user_id) THEN
         -- 1. Tạo 1 User mẫu
-        INSERT INTO users (id, email, password_hash, display_name) 
-        VALUES (sys_user_id, 'system@pdocs.local', 'fake_hash', 'Hệ Thống PDOCS');
+        INSERT INTO users (id, email, password_hash, display_name, role) 
+        VALUES (sys_user_id, 'system@pdocs.local', 'fake_hash', 'Hệ Thống PDOCS', 'admin');
         
         -- 2. Tạo 3 Quizzes mẫu
         INSERT INTO quizzes (title, subject, questions, created_by) VALUES 

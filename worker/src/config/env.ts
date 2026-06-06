@@ -23,6 +23,7 @@ const EnvSchema = z.object({
 
   OPENAI_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
+  FPT_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

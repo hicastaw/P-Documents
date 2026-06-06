@@ -6,6 +6,7 @@ import { createClient } from "redis";
 import { Client as MinioClient } from "minio";
 import pdfParse from "pdf-parse";
 import { loadEnv } from "./config/env";
+import { batchEmbeddings } from "./embedder";
 
 const env = loadEnv();
 
@@ -75,18 +76,37 @@ async function processDocument(documentId: string) {
 
   await pool.query("UPDATE documents SET sha256=$1, status='approved' WHERE id=$2", [sha256, documentId]);
 
-  // Phase 5: extract + chunk PDF, store chunks (embedding optional later)
+  // Phase 5: extract + chunk PDF, tạo embedding AI rồi lưu vào DB
   try {
     const parsed = await pdfParse(buffer);
     const chunks = chunkText(parsed.text || "");
+
+    // Lấy embedding vector cho toàn bộ chunks (batch, có delay tránh rate limit)
+    const apiKey = env.FPT_API_KEY ?? "";
+    const embeddings = apiKey
+      ? await batchEmbeddings(chunks, apiKey, 200)
+      : chunks.map(() => null);
+
     for (let idx = 0; idx < chunks.length; idx += 1) {
+      const vector = embeddings[idx];
+      // pgvector chấp nhận chuỗi dạng '[0.1, 0.2, ...]' cast về ::vector
+      const embeddingValue = vector ? `[${vector.join(",")}]` : null;
+
       await pool.query(
-        "INSERT INTO doc_chunks(document_id, chunk_index, content, embedding) VALUES ($1,$2,$3,$4) ON CONFLICT (document_id, chunk_index) DO NOTHING",
-        [documentId, idx, chunks[idx], null],
+        `INSERT INTO doc_chunks(document_id, chunk_index, content, embedding)
+         VALUES ($1, $2, $3, $4::vector)
+         ON CONFLICT (document_id, chunk_index)
+         DO UPDATE SET content = EXCLUDED.content, embedding = EXCLUDED.embedding`,
+        [documentId, idx, chunks[idx], embeddingValue],
       );
     }
-  } catch {
-    // ignore extraction failures for now
+
+    console.log(
+      `[Worker] Document ${documentId}: ${chunks.length} chunks, ` +
+      `embedding: ${apiKey ? "✓ AI vector" : "✗ skipped (no API key)"}`,
+    );
+  } catch (err) {
+    console.warn("[Worker] Extract/embed failed for", documentId, err);
   }
 
   // Minimal trust score example (Phase 4 placeholder)
@@ -140,4 +160,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-

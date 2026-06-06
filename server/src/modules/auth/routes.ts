@@ -44,7 +44,7 @@ authRouter.post("/login", async (req: Request, res: Response) => {
     })
     .parse(req.body);
 
-  const result = await pool.query("SELECT id, email, password_hash, display_name FROM users WHERE email=$1", [
+  const result = await pool.query("SELECT id, email, password_hash, display_name, role FROM users WHERE email=$1", [
     body.email.toLowerCase(),
   ]);
   const user = result.rows[0];
@@ -57,7 +57,7 @@ authRouter.post("/login", async (req: Request, res: Response) => {
   const refresh = signRefreshToken(user.id);
 
   return res.json({
-    user: { id: user.id, email: user.email, displayName: user.display_name },
+    user: { id: user.id, email: user.email, displayName: user.display_name, role: user.role },
     accessToken: access.token,
     refreshToken: refresh.token,
     accessExpiresIn: env.JWT_ACCESS_TTL_SECONDS,
@@ -72,7 +72,7 @@ authRouter.post("/logout", requireAuth, async (req: Request, res: Response) => {
 });
 
 authRouter.get("/me", requireAuth, async (req: Request, res: Response) => {
-  const result = await pool.query("SELECT id,email,display_name,created_at FROM users WHERE id=$1", [req.auth!.userId]);
+  const result = await pool.query("SELECT id,email,display_name,role,created_at FROM users WHERE id=$1", [req.auth!.userId]);
   const user = result.rows[0];
   if (!user) return res.status(401).json({ error: "user_not_found" });
   return res.json({ user });

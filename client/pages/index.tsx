@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/shell/AppShell";
 import { apiJsonAuth } from "../lib/api";
@@ -21,6 +22,7 @@ type Stats = {
 };
 
 export default function HomePage() {
+  const router = useRouter();
   const auth = useRequireAuth();
   const { authState } = useAuth();
   const [recentDocs, setRecentDocs] = useState<Doc[]>([]);
@@ -28,11 +30,15 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!auth) return;
+    if (authState.status === "authenticated" && authState.user.role === "admin") {
+      router.replace("/admin");
+      return;
+    }
     apiJsonAuth<{ documents: Doc[] }>("/documents").then((j) => {
       setRecentDocs((j.documents ?? []).slice(0, 4));
     });
     apiJsonAuth<Stats>("/stats").then((s) => setStats(s)).catch(() => {});
-  }, [!!auth]);
+  }, [!!auth, authState.status, authState.user, router]);
 
   if (!auth) return null;
 
@@ -160,10 +166,10 @@ export default function HomePage() {
                   <span
                     className={[
                       "shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-semibold",
-                      d.status === "ready" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700",
+                      d.status === "approved" ? "bg-emerald-50 text-emerald-700" : "bg-sky-50 text-sky-700",
                     ].join(" ")}
                   >
-                    {d.status === "ready" ? "Sẵn sàng" : "Đã upload"}
+                    {d.status === "approved" ? "Sẵn sàng" : "Đã upload"}
                   </span>
                 </div>
               ))}

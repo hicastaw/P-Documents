@@ -12,6 +12,7 @@ export type AuthUser = {
   id: string;
   email: string;
   display_name: string;
+  role: string;
 };
 
 type AuthState =

@@ -18,9 +18,13 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (authState.status === "authenticated") {
-      router.replace("/documents");
+      if (authState.user.role === "admin") {
+        router.replace("/admin");
+      } else {
+        router.replace("/documents");
+      }
     }
-  }, [authState.status, router]);
+  }, [authState.status, authState.user, router]);
 
   function switchTab(t: Tab) {
     setTab(t);
