@@ -11,7 +11,7 @@
  */
 
 import { pool } from "../../db/pg";
-import { callFPTCloud, FptError, FptMessage } from "./fpt";
+import { llmFactory, LLMError, LLMMessage } from "./llmFactory";
 import { buildSystemPrompt, buildUserMessage } from "./prompts";
 import { loadEnv } from "../../config/env";
 
@@ -21,32 +21,7 @@ const MAX_VECTOR_CHUNKS = 8;  // chunks returned by vector similarity search
 const MAX_KEYWORD_CHUNKS = 8; // chunks returned by keyword search (ILIKE fallback)
 const MAX_FALLBACK_CHUNKS = 5; // chunks returned when no keyword match
 
-/**
- * Gọi FPT AI Embedding để lấy vector của câu hỏi.
- * Trả về null nếu không có API key hoặc thất bại.
- */
-async function getQuestionEmbedding(question: string): Promise<number[] | null> {
-  const apiKey = env.FPT_API_KEY;
-  if (!apiKey || !question.trim()) return null;
-  try {
-    const resp = await fetch("https://mkp-api.fptcloud.com/embeddings", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "Vietnamese_Embedding",
-        input: [question.slice(0, 8000)],
-      }),
-    });
-    if (!resp.ok) return null;
-    const data = (await resp.json()) as { data: { embedding: number[] }[] };
-    return data.data?.[0]?.embedding ?? null;
-  } catch {
-    return null;
-  }
-}
+
 
 export interface ChatChunk {
   chunk_index: number;
@@ -56,7 +31,7 @@ export interface ChatChunk {
 
 export interface ChatResult {
   answer: string;
-  mode: "fpt" | "fallback_no_chunks" | "fallback_no_api_key";
+  mode: string | "fallback_no_chunks" | "fallback_no_api_key";
   citations: Array<{ chunkIndex: number; documentId: string }>;
 }
 
@@ -85,7 +60,7 @@ export async function handleChat(opts: {
   }
 
   // -- 3. No API key → return raw context as readable text --
-  if (!env.FPT_API_KEY) {
+  if (!llmFactory.getActiveProvider()) {
     const contextText = chunks
       .map((c) => `[Đoạn #${c.chunk_index}] ${c.content}`)
       .join("\n\n");
@@ -93,7 +68,7 @@ export async function handleChat(opts: {
       answer:
         `**Câu hỏi:** ${question}\n\n` +
         `**Nội dung liên quan tìm thấy:**\n\n${contextText}\n\n` +
-        `*(Tích hợp AI sẽ được bật khi cấu hình FPT_API_KEY.)*`,
+        `*(Tích hợp AI sẽ được bật khi cấu hình GEMINI_API_KEY hoặc FPT_API_KEY.)*`,
       mode: "fallback_no_api_key",
       citations: chunks.map((c) => ({ chunkIndex: c.chunk_index, documentId: c.document_id })),
     };
@@ -114,30 +89,30 @@ export async function handleChat(opts: {
   const system = buildSystemPrompt();
   const userMsg = buildUserMessage({ question, chunks, documentTitle });
 
-  const messages: FptMessage[] = [
+  const messages: LLMMessage[] = [
     { role: "system", content: system },
     { role: "user", content: userMsg },
   ];
 
   try {
-    const { answer } = await callFPTCloud(env.FPT_API_KEY, messages, {
+    const { answer } = await llmFactory.callLLM(messages, {
       temperature: 0.2, // low temp for factual responses
     });
     return {
       answer,
-      mode: "fpt",
+      mode: llmFactory.getActiveProvider() || "unknown",
       citations: chunks.map((c) => ({ chunkIndex: c.chunk_index, documentId: c.document_id })),
     };
   } catch (err) {
-    if (err instanceof FptError) {
+    if (err instanceof LLMError) {
       // Log structured error for debugging
-      console.error("[chat/service] FptError", {
+      console.error("[chat/service] LLMError", {
         code: err.code,
         httpStatus: err.httpStatus,
         message: err.message,
       });
       // Surface a friendly message to the user
-      throw new Error(`fpt:${err.code}:${err.httpStatus ?? ""}`);
+      throw new Error(`llm:${err.code}:${err.httpStatus ?? ""}`);
     }
     throw err;
   }
@@ -153,7 +128,7 @@ export async function handleChat(opts: {
  */
 async function retrieveChunks(question: string, documentId?: string): Promise<ChatChunk[]> {
   // ── Bước 1: Thử lấy embedding của câu hỏi ────────────────────────────────
-  const questionVector = await getQuestionEmbedding(question);
+  const questionVector = await llmFactory.getEmbedding(question);
 
   // ── Bước 2: Vector Similarity Search (nếu có embedding) ──────────────────
   if (questionVector) {

@@ -40,31 +40,12 @@ const MOCK_DOCS = [
   },
 ];
 
-async function getFPTEmbedding(text: string): Promise<number[]> {
-  const url = "https://mkp-api.fptcloud.com/embeddings";
-  const body = JSON.stringify({
-    input: text,
-    model: "Vietnamese_Embedding",
-  });
+import { llmFactory } from "../modules/chat/llmFactory";
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${env.FPT_API_KEY}`,
-    },
-    body,
-  });
-
-  if (!res.ok) {
-    const txt = await res.text();
-    throw new Error(`FPT API Error ${res.status}: ${txt}`);
-  }
-
-  const json = await res.json();
-  const vector = json.data?.[0]?.embedding;
+async function getEmbedding(text: string): Promise<number[]> {
+  const vector = await llmFactory.getEmbedding(text);
   if (!vector || !Array.isArray(vector)) {
-    throw new Error("Invalid embedding format from FPT AI");
+    throw new Error("Invalid embedding format from AI Factory");
   }
   return vector;
 }
@@ -86,7 +67,7 @@ async function main() {
 
     // Get embedding combining title + desc
     const textContext = doc.title + "\n" + doc.description;
-    const vector = await getFPTEmbedding(textContext);
+    const vector = await getEmbedding(textContext);
 
     // Insert to doc_chunks
     const chunkId = uuidv4();

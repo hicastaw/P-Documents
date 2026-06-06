@@ -15,70 +15,75 @@
  *   - "FPT.AI-gte-base"      : nhỏ hơn, nhanh hơn
  */
 
+import { GoogleGenerativeAI, TaskType } from "@google/generative-ai";
+
 const FPT_EMBED_URL = "https://mkp-api.fptcloud.com/embeddings";
-export const EMBED_MODEL = "Vietnamese_Embedding"; // Đổi model vì API Key cũ bị cấm dùng e5
-export const EMBED_DIM = 1024; // Số chiều vector của Vietnamese_Embedding
+export const EMBED_MODEL = "Vietnamese_Embedding"; 
+export const EMBED_DIM = 1024; 
 
-
-/**
- * Gọi FPT AI để lấy embedding vector của một đoạn text.
- * Trả về mảng số 1024 chiều, hoặc null nếu không có API key / thất bại.
- */
-export async function getEmbedding(
-  text: string,
-  apiKey: string,
-): Promise<number[] | null> {
+async function getFptEmbedding(text: string, apiKey: string): Promise<number[] | null> {
   if (!apiKey || !text.trim()) return null;
-
   try {
     const response = await fetch(FPT_EMBED_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`, // FPT AI dùng Bearer token
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: EMBED_MODEL,
-        input: [text.slice(0, 8000)], // FPT API nhận input dạng array
+        input: [text.slice(0, 8000)],
       }),
     });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn(`[Embedder] FPT AI API error ${response.status}:`, errText);
-      return null;
-    }
-
-    const data = (await response.json()) as {
-      data: { embedding: number[]; index: number }[];
-    };
-
+    if (!response.ok) return null;
+    const data = (await response.json()) as { data: { embedding: number[] }[] };
     return data.data?.[0]?.embedding ?? null;
   } catch (err) {
-    console.warn("[Embedder] FPT AI embedding request failed:", err);
     return null;
   }
 }
 
-/**
- * Batch embedding: gọi lần lượt với delay nhỏ để tránh rate limit.
- * Trả về mảng các vector (null nếu từng chunk thất bại).
- */
+async function getGeminiEmbedding(text: string, apiKey: string): Promise<number[] | null> {
+  if (!apiKey || !text.trim()) return null;
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
+    const result = await model.embedContent({
+      content: { role: "user", parts: [{ text: text.slice(0, 8000) }] },
+      taskType: TaskType.RETRIEVAL_DOCUMENT,
+      outputDimensionality: 1024
+    } as any);
+    return result.embedding.values;
+  } catch (err) {
+    console.error("[Embedder] Gemini API Error:", err);
+    return null;
+  }
+}
+
+export async function getEmbedding(text: string, keys: { gemini?: string; fpt?: string }): Promise<number[] | null> {
+  if (keys.gemini) {
+    const vec = await getGeminiEmbedding(text, keys.gemini);
+    if (vec) return vec;
+  }
+  if (keys.fpt) {
+    const vec = await getFptEmbedding(text, keys.fpt);
+    if (vec) return vec;
+  }
+  return null;
+}
+
 export async function batchEmbeddings(
   texts: string[],
-  apiKey: string,
-  delayMs = 300, // FPT AI cần delay lớn hơn một chút so với OpenAI
+  keys: { gemini?: string; fpt?: string },
+  delayMs = 300,
 ): Promise<(number[] | null)[]> {
   const results: (number[] | null)[] = [];
-
   for (const text of texts) {
-    const vector = await getEmbedding(text, apiKey);
+    const vector = await getEmbedding(text, keys);
     results.push(vector);
-
     if (delayMs > 0) {
       await new Promise((r) => setTimeout(r, delayMs));
     }
   }
-
   return results;
 }

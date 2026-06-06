@@ -6,7 +6,7 @@
  *   → { answer, mode, citations }
  *
  * Errors are bubbled up to the global Express error handler in app.ts.
- * FPT Cloud errors are identified by the "fpt:" prefix in the
+ * LLM API errors are identified by the "llm:" prefix in the
  * message so they can be mapped to user-friendly strings on the client.
  */
 
@@ -44,14 +44,14 @@ chatRouter.post("/", requireAuth, async (req, res) => {
     // Log for server-side debugging
     console.error("[chat/routes] Unhandled chat error:", message);
 
-    // Distinguish FPT Cloud AI errors (code is "fpt:<CODE>:<httpStatus>")
-    if (message.startsWith("fpt:")) {
+    // Distinguish LLM Cloud AI errors (code is "llm:<CODE>:<httpStatus>")
+    if (message.startsWith("llm:")) {
       const [, code, httpStatus] = message.split(":");
       return res.status(502).json({
         error: "ai_error",
         code,
         httpStatus: httpStatus ? Number(httpStatus) : undefined,
-        message: friendlyFptError(code),
+        message: friendlyLLMError(code),
       });
     }
 
@@ -59,15 +59,17 @@ chatRouter.post("/", requireAuth, async (req, res) => {
   }
 });
 
-function friendlyFptError(code: string): string {
+function friendlyLLMError(code: string): string {
   switch (code) {
     case "NETWORK_ERROR":
-      return "Không thể kết nối đến dịch vụ AI của FPT Cloud. Vui lòng thử lại sau.";
+      return "Không thể kết nối đến dịch vụ AI. Vui lòng thử lại sau.";
     case "API_ERROR":
-      return "Dịch vụ FPT Cloud AI trả về lỗi. Kiểm tra FPT_API_KEY và hạn mức sử dụng.";
+      return "Dịch vụ AI trả về lỗi. Kiểm tra cấu hình API Key và hạn mức sử dụng.";
     case "INVALID_RESPONSE":
-      return "Định dạng phản hồi từ FPT Cloud AI không hợp lệ.";
+      return "Định dạng phản hồi từ AI không hợp lệ.";
+    case "CONFIG_ERROR":
+      return "Chưa cấu hình API Key (GEMINI_API_KEY hoặc FPT_API_KEY) trên hệ thống.";
     default:
-      return "Lỗi không xác định từ dịch vụ FPT Cloud AI.";
+      return "Lỗi không xác định từ dịch vụ AI.";
   }
 }

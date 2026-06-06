@@ -30,37 +30,14 @@ function toPublicMinioUrl(internalUrl: string) {
   return internalUrl.replace(internalBase, publicBase);
 }
 
+import { llmFactory } from "../chat/llmFactory";
+
 /**
- * Gọi FPT AI để lấy vector embedding của câu tìm kiếm.
- * FPT AI dùng format tương thích OpenAI 100%.
- * Trả về null nếu không có API key hoặc thất bại.
+ * Gọi AI Factory để lấy vector embedding của câu tìm kiếm.
+ * Trả về null nếu không có cấu hình API key hoặc thất bại.
  */
 async function getQueryEmbedding(query: string): Promise<number[] | null> {
-  const apiKey = env.FPT_API_KEY;
-  if (!apiKey || !query.trim()) return null;
-
-  try {
-    const resp = await fetch("https://mkp-api.fptcloud.com/embeddings", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`, // FPT AI dùng Bearer token
-      },
-      body: JSON.stringify({
-        model: "Vietnamese_Embedding", // 1024 chiều, hỗ trợ tiếng Việt tốt
-        input: [query.slice(0, 8000)], // FPT API nhận input dạng array
-      }),
-    });
-
-    if (!resp.ok) return null;
-
-    const data = (await resp.json()) as {
-      data: { embedding: number[] }[];
-    };
-    return data.data?.[0]?.embedding ?? null;
-  } catch {
-    return null;
-  }
+  return llmFactory.getEmbedding(query);
 }
 
 

@@ -34,6 +34,7 @@ const EnvSchema = z.object({
 
   // AI keys (optional)
   FPT_API_KEY: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
 });
 

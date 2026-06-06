@@ -82,9 +82,10 @@ async function processDocument(documentId: string) {
     const chunks = chunkText(parsed.text || "");
 
     // Lấy embedding vector cho toàn bộ chunks (batch, có delay tránh rate limit)
-    const apiKey = env.FPT_API_KEY ?? "";
-    const embeddings = apiKey
-      ? await batchEmbeddings(chunks, apiKey, 200)
+    const keys = { gemini: env.GEMINI_API_KEY, fpt: env.FPT_API_KEY };
+    const hasKeys = keys.gemini || keys.fpt;
+    const embeddings = hasKeys
+      ? await batchEmbeddings(chunks, keys, 200)
       : chunks.map(() => null);
 
     for (let idx = 0; idx < chunks.length; idx += 1) {
@@ -103,7 +104,7 @@ async function processDocument(documentId: string) {
 
     console.log(
       `[Worker] Document ${documentId}: ${chunks.length} chunks, ` +
-      `embedding: ${apiKey ? "✓ AI vector" : "✗ skipped (no API key)"}`,
+      `embedding: ${hasKeys ? "✓ AI vector" : "✗ skipped (no API key)"}`,
     );
   } catch (err) {
     console.warn("[Worker] Extract/embed failed for", documentId, err);
