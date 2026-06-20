@@ -2,8 +2,8 @@ import Link from "next/link";
 import Head from "next/head";
 import { useRouter } from "next/router";
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAuth } from "../../lib/auth-context";
-import { API_BASE, apiJsonAuth, getAccessToken } from "../../lib/api";
+import { useAuth } from "../../hooks/auth-context";
+import { API_BASE, apiJsonAuth, getAccessToken } from "../../services/api";
 import { io, Socket } from "socket.io-client";
 
 type NavItem = { href: string; label: string; icon: ReactNode };

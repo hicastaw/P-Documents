@@ -3,14 +3,14 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { ZodError } from "zod";
 import { loadEnv } from "./config/env";
-import { authRouter } from "./modules/auth/routes";
-import { documentsRouter } from "./modules/documents/routes";
-import { quizRouter } from "./modules/quiz/routes";
-import { chatRouter } from "./modules/chat/routes";
-import { forumRouter } from "./modules/forum/routes";
-import { notificationsRouter } from "./modules/notifications/routes";
-import { statsRouter } from "./modules/stats/routes";
-import { adminRouter } from "./modules/admin/routes";
+import { authRouter } from "./routes/auth.routes";
+import { documentsRouter } from "./routes/documents.routes";
+import { quizRouter } from "./routes/quiz.routes";
+import { chatRouter } from "./routes/chat.routes";
+import { forumRouter } from "./routes/forum.routes";
+import { notificationsRouter } from "./routes/notifications.routes";
+import { statsRouter } from "./routes/stats.routes";
+import { adminRouter } from "./routes/admin.routes";
 
 export function createApp() {
   const env = loadEnv();

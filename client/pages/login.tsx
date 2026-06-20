@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Head from "next/head";
-import { useAuth } from "../lib/auth-context";
+import { useAuth } from "../hooks/auth-context";
 
 type Tab = "login" | "register";
 

@@ -2,9 +2,9 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/shell/AppShell";
-import { apiJsonAuth } from "../lib/api";
-import { useRequireAuth } from "../lib/use-require-auth";
-import { useAuth } from "../lib/auth-context";
+import { apiJsonAuth } from "../services/api";
+import { useRequireAuth } from "../hooks/use-require-auth";
+import { useAuth } from "../hooks/auth-context";
 
 type Doc = {
   id: string;

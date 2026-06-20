@@ -1,26 +1,16 @@
 import "dotenv/config";
 import http from "http";
-import { Server } from "socket.io";
 import { createApp } from "./app";
 import { loadEnv } from "./config/env";
-import { redis } from "./redis/client";
+import { redis } from "./config/redis";
+import { initializeSockets } from "./sockets";
 
 async function main() {
   const env = loadEnv();
   const app = createApp();
   const server = http.createServer(app);
 
-  const io = new Server(server, {
-    cors: {
-      origin: env.API_CORS_ORIGIN,
-      credentials: true,
-    },
-  });
-
-  io.on("connection", (socket) => {
-    socket.on("join", (room: string) => socket.join(room));
-  });
-
+  const io = initializeSockets(server);
   app.set("io", io);
 
   await redis.connect();

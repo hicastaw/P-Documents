@@ -3,8 +3,8 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { AppShell } from "../../components/shell/AppShell";
-import { API_BASE, authHeader, getAccessToken } from "../../lib/api";
-import { useRequireAuth } from "../../lib/use-require-auth";
+import { getQuiz, getLeaderboard, getHistory, submitQuiz } from "../../services/quizApi";
+import { useRequireAuth } from "../../hooks/use-require-auth";
 
 type QuizDetail = {
   id: string;
@@ -36,8 +36,6 @@ export default function QuizAttemptPage() {
   const [timeTaken, setTimeTaken] = useState<number>(0);
   const [loading, setLoading] = useState(false);
 
-  function hdr() { return authHeader(getAccessToken()); }
-
   useEffect(() => {
     if (!auth) return;
     const socket = io({ path: "/socket.io" });
@@ -55,16 +53,19 @@ export default function QuizAttemptPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const res = await fetch(`${API_BASE}/quiz/${quizId}`, { headers: hdr() });
-      const j = await res.json().catch(() => ({}));
-      if (cancelled) return;
-      if (!res.ok) { setError(j?.error ?? "load_failed"); setLoading(false); return; }
-      setQuiz(j.quiz as QuizDetail);
-      const qs = Array.isArray(j?.quiz?.questions) ? j.quiz.questions : [];
-      setAnswers(new Array(qs.length).fill(null));
-      setTotalQuestions(qs.length);
-      setTimeLeftSec(QUIZ_DURATION);
-      setLoading(false);
+      try {
+        const j = await getQuiz(quizId);
+        if (cancelled) return;
+        setQuiz(j.quiz as QuizDetail);
+        const qs = Array.isArray(j?.quiz?.questions) ? j.quiz.questions : [];
+        setAnswers(new Array(qs.length).fill(null));
+        setTotalQuestions(qs.length);
+        setTimeLeftSec(QUIZ_DURATION);
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message ?? "load_failed");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     })();
     loadLeaderboard();
     loadHistory();
@@ -92,20 +93,16 @@ export default function QuizAttemptPage() {
   async function loadLeaderboard() {
     if (!quizId) return;
     try {
-      const t = getAccessToken();
-      const res = await fetch(`${API_BASE}/quiz/${quizId}/leaderboard`, { headers: authHeader(t) });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) setLeaderboard(j.leaderboard ?? []);
+      const j = await getLeaderboard(quizId);
+      setLeaderboard(j.leaderboard ?? []);
     } catch { /* ignore */ }
   }
 
   async function loadHistory() {
     if (!quizId) return;
     try {
-      const t = getAccessToken();
-      const res = await fetch(`${API_BASE}/quiz/${quizId}/history`, { headers: authHeader(t) });
-      const j = await res.json().catch(() => ({}));
-      if (res.ok) setHistory(j.attempts ?? []);
+      const j = await getHistory(quizId);
+      setHistory(j.attempts ?? []);
     } catch { /* ignore */ }
   }
 
@@ -114,17 +111,15 @@ export default function QuizAttemptPage() {
     const elapsed = QUIZ_DURATION - timeLeftSec;
     setTimeTaken(elapsed);
     setError(null);
-    const res = await fetch(`${API_BASE}/quiz/${quizId}/submit`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...hdr() },
-      body: JSON.stringify({ answers, timeTakenSeconds: elapsed }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) { setError(j?.error ?? "submit_failed"); return; }
-    setScore(j?.attempt?.score ?? 0);
-    setSubmitted(true);
-    loadLeaderboard();
-    loadHistory();
+    try {
+      const j = await submitQuiz(quizId, { answers, timeTakenSeconds: elapsed });
+      setScore(j?.attempt?.score ?? 0);
+      setSubmitted(true);
+      loadLeaderboard();
+      loadHistory();
+    } catch (err: any) {
+      setError(err?.message ?? "submit_failed");
+    }
   }
 
   if (!auth) return null;

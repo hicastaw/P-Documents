@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "../components/shell/AppShell";
-import { API_BASE, apiJsonAuth } from "../lib/api";
-import { useRequireAuth } from "../lib/use-require-auth";
+import { API_BASE, apiJsonAuth } from "../services/api";
+import { useRequireAuth } from "../hooks/use-require-auth";
 
 type Thread = {
   id: string;

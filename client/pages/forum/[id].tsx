@@ -3,9 +3,9 @@ import { useRouter } from "next/router";
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { AppShell } from "../../components/shell/AppShell";
-import { API_BASE, apiJsonAuth, getAccessToken } from "../../lib/api";
-import { useRequireAuth } from "../../lib/use-require-auth";
-import { useAuth } from "../../lib/auth-context";
+import { API_BASE, apiJsonAuth, getAccessToken } from "../../services/api";
+import { useRequireAuth } from "../../hooks/use-require-auth";
+import { useAuth } from "../../hooks/auth-context";
 
 type ThreadDetail = {
   id: string;

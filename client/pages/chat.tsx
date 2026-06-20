@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AppShell } from "../components/shell/AppShell";
-import { API_BASE, apiJsonAuth, authHeader, getAccessToken } from "../lib/api";
-import { useRequireAuth } from "../lib/use-require-auth";
+import { apiJsonAuth } from "../services/api";
+import { askQuestion as askQuestionApi } from "../services/chatApi";
+import { useRequireAuth } from "../hooks/use-require-auth";
 
 type Doc = { id: string; title: string };
 type Message = { role: "user" | "ai"; text: string };
@@ -38,24 +39,11 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const body: Record<string, any> = { question: q };
-      if (selectedDocId) body.documentId = selectedDocId;
-
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/chat`, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...authHeader(token) },
-        body: JSON.stringify(body),
-      });
-      const j = await res.json();
-      if (!res.ok) {
-        setError("Không thể nhận trả lời từ AI. Vui lòng thử lại.");
-        return;
-      }
+      const j = await askQuestionApi(q, selectedDocId || undefined);
       const answer = j.answer ?? "(không có câu trả lời)";
       setMessages((m) => [...m, { role: "ai" as const, text: answer }]);
     } catch {
-      setError("Mất kết nối. Vui lòng kiểm tra đường truyền.");
+      setError("Không thể nhận trả lời từ AI. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }

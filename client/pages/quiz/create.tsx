@@ -1,8 +1,8 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/router";
 import { AppShell } from "../../components/shell/AppShell";
-import { API_BASE, authHeader, getAccessToken } from "../../lib/api";
-import { useRequireAuth } from "../../lib/use-require-auth";
+import { createQuiz } from "../../services/quizApi";
+import { useRequireAuth } from "../../hooks/use-require-auth";
 
 type Answer = { text: string; isCorrect: boolean };
 type Question = {
@@ -136,14 +136,7 @@ export default function CreateQuizPage() {
 
     setSubmitting(true);
     try {
-      const token = getAccessToken();
-      const res = await fetch(`${API_BASE}/quiz`, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...authHeader(token) },
-        body: JSON.stringify({ title: title.trim(), subject: subject.trim() || undefined, questions: serverQuestions }),
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error ?? "create_failed");
+      const j = await createQuiz({ title: title.trim(), subject: subject.trim() || undefined, questions: serverQuestions });
       router.push(`/quiz/${j.quiz.id}`);
     } catch (err: any) {
       setError(err.message || "Tạo quiz thất bại. Vui lòng thử lại.");

@@ -2,15 +2,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import { AppShell } from "../components/shell/AppShell";
-import { API_BASE, authHeader, getAccessToken } from "../lib/api";
-import { useRequireAuth } from "../lib/use-require-auth";
-
-type QuizListItem = {
-  id: string;
-  title: string;
-  subject: string | null;
-  created_at: string;
-};
+import { listQuizzes as listQuizzesApi, seedQuizzes as seedQuizzesApi, type QuizListItem } from "../services/quizApi";
+import { useRequireAuth } from "../hooks/use-require-auth";
 
 export default function QuizPage() {
   const auth = useRequireAuth();
@@ -20,8 +13,6 @@ export default function QuizPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
   const [seeding, setSeeding] = useState(false);
-
-  function hdr() { return authHeader(getAccessToken()); }
 
   useEffect(() => {
     if (!auth) return;
@@ -45,15 +36,10 @@ export default function QuizPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/quiz`, { headers: hdr() });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError("Không thể tải danh sách quiz. Vui lòng thử lại.");
-        return;
-      }
-      setQuizzes((j.quizzes ?? []) as QuizListItem[]);
+      const j = await listQuizzesApi();
+      setQuizzes(j.quizzes ?? []);
     } catch {
-      setError("Lỗi kết nối khi tải quiz.");
+      setError("Không thể tải danh sách quiz. Vui lòng thử lại.");
     } finally {
       setLoading(false);
     }
@@ -62,11 +48,10 @@ export default function QuizPage() {
   async function seedQuizzes() {
     setSeeding(true);
     try {
-      const res = await fetch(`${API_BASE}/quiz/seed`, { method: "POST", headers: hdr() });
-      if (res.ok) await loadQuizzes();
-      else setError("Không thể tạo quiz mẫu.");
+      await seedQuizzesApi();
+      await loadQuizzes();
     } catch {
-      setError("Lỗi kết nối khi tạo quiz mẫu.");
+      setError("Không thể tạo quiz mẫu.");
     } finally {
       setSeeding(false);
     }
