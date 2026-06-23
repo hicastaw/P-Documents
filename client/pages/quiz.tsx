@@ -4,6 +4,7 @@ import { io } from "socket.io-client";
 import { AppShell } from "../components/shell/AppShell";
 import { listQuizzes as listQuizzesApi, seedQuizzes as seedQuizzesApi, type QuizListItem } from "../services/quizApi";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { Trophy, AlertCircle, X, ClipboardList, Sparkles, Calendar, ArrowRight } from "lucide-react";
 
 export default function QuizPage() {
   const auth = useRequireAuth();
@@ -18,7 +19,7 @@ export default function QuizPage() {
     if (!auth) return;
     const socket = io({ path: "/socket.io" });
     socket.on("leaderboard:update", (evt: any) => {
-      setLiveMsg(`🏆 Quiz cập nhật: ${evt.quizId?.slice(0, 8)} · Điểm ${evt.score}`);
+      setLiveMsg(`Quiz cập nhật: ${evt.quizId?.slice(0, 8)} · Điểm ${evt.score}`);
       setTimeout(() => setLiveMsg(null), 5000);
     });
     return () => { socket.disconnect(); };
@@ -103,7 +104,7 @@ export default function QuizPage() {
         {/* Live leaderboard toast */}
         {liveMsg && (
           <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800 animate-fadeIn">
-            <span className="shrink-0 text-amber-500">📡</span>
+            <Trophy size={16} strokeWidth={2} className="shrink-0 text-amber-500" />
             {liveMsg}
           </div>
         )}
@@ -111,8 +112,10 @@ export default function QuizPage() {
         {/* Error */}
         {error && (
           <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span>⚠</span> {error}
-            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+            <AlertCircle size={16} strokeWidth={2} className="shrink-0" /> {error}
+            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+              <X size={14} strokeWidth={2} />
+            </button>
           </div>
         )}
 
@@ -137,7 +140,9 @@ export default function QuizPage() {
           </div>
         ) : (
           <div className="py-16 text-center">
-            <div className="text-4xl mb-3">📝</div>
+            <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+              <ClipboardList size={22} strokeWidth={1.8} />
+            </div>
             <div className="text-sm font-semibold text-slate-600 mb-1">
               {q ? "Không tìm thấy quiz phù hợp" : "Chưa có quiz nào"}
             </div>
@@ -150,7 +155,9 @@ export default function QuizPage() {
                 disabled={seeding}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-6px_rgba(225,29,72,0.6)] hover:from-rose-500 hover:to-rose-400 transition disabled:opacity-60"
               >
-                {seeding ? "Đang tạo..." : "✨ Tạo quiz mẫu"}
+                {seeding ? "Đang tạo..." : (
+                  <span className="flex items-center gap-1.5"><Sparkles size={14} strokeWidth={2} /> Tạo quiz mẫu</span>
+                )}
               </button>
             )}
           </div>
@@ -161,19 +168,17 @@ export default function QuizPage() {
 }
 
 function QuizCard({ quiz }: { quiz: QuizListItem }) {
-  const seed = hashToHue(quiz.id);
-  const banner = `linear-gradient(135deg, hsla(${seed},88%,52%,0.92), hsla(${(seed + 38) % 360},88%,56%,0.80))`;
   const created = new Date(quiz.created_at);
 
   return (
     <Link
       href={`/quiz/${quiz.id}`}
-      className="group overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_4px_20px_-12px_rgba(2,6,23,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-16px_rgba(2,6,23,0.28)]"
+      className="group overflow-hidden rounded-2xl border border-black/5 bg-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-popover"
     >
-      <div className="relative h-32 flex items-end p-3" style={{ background: banner }}>
-        <div className="absolute inset-0 opacity-20 [background:radial-gradient(700px_180px_at_10%_10%,white,transparent)]" />
+      <div className="relative h-32 flex items-end justify-between bg-slate-50 p-3">
+        <ClipboardList size={28} strokeWidth={1.5} className="text-slate-300" />
         {quiz.subject && (
-          <span className="relative rounded-lg bg-white/85 px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-sm">
+          <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-slate-800 shadow-sm">
             {quiz.subject}
           </span>
         )}
@@ -181,20 +186,14 @@ function QuizCard({ quiz }: { quiz: QuizListItem }) {
       <div className="p-4">
         <div className="truncate text-sm font-bold text-slate-900">{quiz.title}</div>
         <div className="mt-2 flex items-center gap-3 text-xs text-slate-500">
-          <span>📅 {created.toLocaleDateString("vi-VN")}</span>
-          <span className="ml-auto text-xs font-semibold text-rose-600 group-hover:text-rose-500 transition">
-            Làm bài →
+          <span className="flex items-center gap-1"><Calendar size={12} strokeWidth={2} /> {created.toLocaleDateString("vi-VN")}</span>
+          <span className="ml-auto flex items-center gap-1 text-xs font-semibold text-rose-600 group-hover:text-rose-500 transition">
+            Làm bài <ArrowRight size={12} strokeWidth={2} />
           </span>
         </div>
       </div>
     </Link>
   );
-}
-
-function hashToHue(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 360;
 }
 
 function SearchIcon() {

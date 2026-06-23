@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 import Head from "next/head";
 import { useAuth } from "../hooks/auth-context";
+import { AlertCircle } from "lucide-react";
 
 type Tab = "login" | "register";
 
@@ -67,11 +68,10 @@ export default function LoginPage() {
         <title>{tab === "login" ? "Đăng nhập" : "Đăng ký"} — P-Documents</title>
       </Head>
       <div className="min-h-screen bg-login flex items-center justify-center p-4">
-        {/* Decorative blobs */}
+        {/* Decorative blob */}
         <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-rose-400/20 blur-3xl" />
-          <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-sky-400/15 blur-3xl" />
-          <div className="absolute top-1/2 left-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-400/10 blur-3xl" />
+          <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-rose-400/15 blur-3xl" />
+          <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-rose-300/10 blur-3xl" />
         </div>
 
         <div className="relative w-full max-w-[420px] animate-scaleIn">
@@ -166,7 +166,7 @@ export default function LoginPage() {
 
                 {error && (
                   <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 animate-fadeIn">
-                    <span className="mt-0.5 shrink-0">⚠</span>
+                    <AlertCircle size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
                     <span>{error}</span>
                   </div>
                 )}
@@ -221,11 +221,7 @@ export default function LoginPage() {
 
       <style jsx global>{`
         .bg-login {
-          background:
-            radial-gradient(800px 600px at 15% 10%, rgba(244, 63, 94, 0.18), transparent 60%),
-            radial-gradient(700px 500px at 90% 80%, rgba(14, 165, 233, 0.14), transparent 55%),
-            radial-gradient(600px 500px at 50% 50%, rgba(139, 92, 246, 0.08), transparent 60%),
-            linear-gradient(165deg, #fff1f2 0%, #f8fafc 40%, #eff6ff 100%);
+          background: linear-gradient(165deg, #fff1f2 0%, #f8fafc 55%);
         }
       `}</style>
     </>

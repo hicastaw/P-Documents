@@ -5,6 +5,7 @@ import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useAuth } from "../../hooks/auth-context";
 import { API_BASE, apiJsonAuth, getAccessToken } from "../../services/api";
 import { io, Socket } from "socket.io-client";
+import { MessageSquare, ClipboardList, Bell as BellLucide } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: ReactNode };
 
@@ -280,10 +281,16 @@ function NotificationBell() {
                   ].join(" ")}
                 >
                   <div className={[
-                    "mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg text-xs",
+                    "mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-lg",
                     !n.read ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-400",
                   ].join(" ")}>
-                    {n.type === "forum_reply" ? "💬" : n.type === "quiz" ? "📝" : "🔔"}
+                    {n.type === "forum_reply" ? (
+                      <MessageSquare size={14} strokeWidth={2} />
+                    ) : n.type === "quiz" ? (
+                      <ClipboardList size={14} strokeWidth={2} />
+                    ) : (
+                      <BellLucide size={14} strokeWidth={2} />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className={["text-xs leading-snug", !n.read ? "font-semibold text-slate-900" : "text-slate-600"].join(" ")}>

@@ -5,6 +5,7 @@ import { AppShell } from "../components/shell/AppShell";
 import { apiJsonAuth } from "../services/api";
 import { askQuestion as askQuestionApi } from "../services/chatApi";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { MessageSquare, Send, AlertCircle, X, FolderOpen, FileText } from "lucide-react";
 
 type Doc = { id: string; title: string };
 type Message = { role: "user" | "ai"; text: string };
@@ -62,7 +63,7 @@ export default function ChatPage() {
             {messages.length === 0 && (
               <div className="flex flex-1 flex-col items-center justify-center gap-3 py-12 text-center text-sm text-slate-400">
                 <div className="grid h-14 w-14 place-items-center rounded-2xl bg-slate-50 text-slate-300">
-                  <ChatBigIcon />
+                  <MessageSquare size={28} strokeWidth={1.5} />
                 </div>
                 <div>
                   <div className="font-semibold text-slate-600">Bắt đầu hỏi</div>
@@ -81,7 +82,7 @@ export default function ChatPage() {
                     "grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-bold",
                     msg.role === "user"
                       ? "bg-rose-600 text-white"
-                      : "bg-gradient-to-br from-violet-500 to-purple-600 text-white",
+                      : "bg-violet-600 text-white",
                   ].join(" ")}
                 >
                   {msg.role === "user" ? "B" : "AI"}
@@ -135,7 +136,7 @@ export default function ChatPage() {
 
             {loading && (
               <div className="flex gap-3">
-                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-purple-600 text-xs font-bold text-white">
+                <div className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-violet-600 text-xs font-bold text-white">
                   AI
                 </div>
                 <div className="flex items-center gap-1 rounded-2xl rounded-tl-sm bg-slate-100 px-4 py-3">
@@ -151,8 +152,10 @@ export default function ChatPage() {
           {/* Error */}
           {error && (
             <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
-              <span>⚠</span> {error}
-              <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+              <AlertCircle size={16} strokeWidth={2} className="shrink-0" /> {error}
+              <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+                <X size={14} strokeWidth={2} />
+              </button>
             </div>
           )}
 
@@ -176,7 +179,7 @@ export default function ChatPage() {
               disabled={loading || !question.trim()}
               className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-6px_rgba(225,29,72,0.6)] hover:from-rose-500 hover:to-rose-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <SendIcon />
+              <Send size={14} strokeWidth={2} />
               Gửi
             </button>
           </div>
@@ -202,7 +205,7 @@ export default function ChatPage() {
                       : "border-transparent bg-slate-50 text-slate-600 hover:bg-slate-100",
                   ].join(" ")}
                 >
-                  🗂 Tất cả tài liệu
+                  <span className="flex items-center gap-1.5"><FolderOpen size={13} strokeWidth={2} /> Tất cả tài liệu</span>
                 </button>
                 {docs.map((d) => (
                   <button
@@ -215,7 +218,7 @@ export default function ChatPage() {
                         : "border-transparent bg-slate-50 text-slate-600 hover:bg-slate-100",
                     ].join(" ")}
                   >
-                    📄 {d.title}
+                    <span className="flex items-center gap-1.5"><FileText size={13} strokeWidth={2} className="shrink-0" /> <span className="truncate">{d.title}</span></span>
                   </button>
                 ))}
               </div>
@@ -233,21 +236,5 @@ export default function ChatPage() {
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function ChatBigIcon() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M20 14a4 4 0 0 1-4 4H9l-5 3V6a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v8Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
-}
-function SendIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M22 2 11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M22 2 15 22 11 13 2 9l20-7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
   );
 }

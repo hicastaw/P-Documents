@@ -8,6 +8,20 @@ export const CATEGORIES = [
   { value: "khac", label: "Khác" },
 ];
 
+const CATEGORY_COLORS: Record<string, { chip: string; icon: string; banner: string; badge: string; ring: string }> = {
+  giao_trinh: { chip: "bg-indigo-50", icon: "text-indigo-500", banner: "from-indigo-50/70", badge: "bg-indigo-50 text-indigo-600", ring: "ring-indigo-500/10" },
+  bai_tap: { chip: "bg-sky-50", icon: "text-sky-500", banner: "from-sky-50/70", badge: "bg-sky-50 text-sky-600", ring: "ring-sky-500/10" },
+  de_thi: { chip: "bg-rose-50", icon: "text-rose-500", banner: "from-rose-50/70", badge: "bg-rose-50 text-rose-600", ring: "ring-rose-500/10" },
+  tai_lieu_tham_khao: { chip: "bg-violet-50", icon: "text-violet-500", banner: "from-violet-50/70", badge: "bg-violet-50 text-violet-600", ring: "ring-violet-500/10" },
+  bao_cao: { chip: "bg-amber-50", icon: "text-amber-500", banner: "from-amber-50/70", badge: "bg-amber-50 text-amber-600", ring: "ring-amber-500/10" },
+  khac: { chip: "bg-slate-100", icon: "text-slate-500", banner: "from-slate-100/70", badge: "bg-slate-100 text-slate-600", ring: "ring-slate-500/10" },
+};
+const DEFAULT_CATEGORY_COLOR = { chip: "bg-slate-100", icon: "text-slate-400", banner: "from-slate-50", badge: "bg-slate-100 text-slate-500", ring: "ring-slate-500/10" };
+
+export function getCategoryColor(slug?: string | null) {
+  return (slug && CATEGORY_COLORS[slug]) || DEFAULT_CATEGORY_COLOR;
+}
+
 export function fmtSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -17,12 +31,6 @@ export function fmtSize(bytes: number) {
 export function fmtDate(s: string) {
   const d = new Date(s);
   return d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-export function hashToHue(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 360;
 }
 
 const UPLOAD_ERROR_MSG: Record<string, string> = {

@@ -6,6 +6,8 @@ import { AppShell } from "../../components/shell/AppShell";
 import { API_BASE, apiJsonAuth, getAccessToken } from "../../services/api";
 import { useRequireAuth } from "../../hooks/use-require-auth";
 import { useAuth } from "../../hooks/auth-context";
+import { hashToAvatarColor } from "../../utils/colors";
+import { ArrowLeft, AlertCircle, X, Send } from "lucide-react";
 
 type ThreadDetail = {
   id: string;
@@ -118,14 +120,16 @@ export default function ForumThreadPage() {
       subtitle={thread ? `bởi ${thread.author_name ?? thread.author_email ?? "Ẩn danh"}` : undefined}
     >
       <div className="grid gap-4 max-w-3xl">
-        <Link className="text-sm font-semibold text-rose-700 underline decoration-rose-300" href="/forum">
-          ← Quay lại diễn đàn
+        <Link className="flex items-center gap-1.5 text-sm font-semibold text-rose-700 underline decoration-rose-300" href="/forum">
+          <ArrowLeft size={14} strokeWidth={2} /> Quay lại diễn đàn
         </Link>
 
         {error && (
           <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            ⚠ {error}
-            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+            <AlertCircle size={16} strokeWidth={2} className="shrink-0" /> {error}
+            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+              <X size={14} strokeWidth={2} />
+            </button>
           </div>
         )}
 
@@ -141,10 +145,7 @@ export default function ForumThreadPage() {
         {thread && (
           <div className="rounded-2xl border border-black/5 bg-white p-5 shadow-[0_4px_20px_-12px_rgba(2,6,23,0.15)]">
             <div className="flex items-start gap-3">
-              <div
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold text-white"
-                style={{ background: `linear-gradient(135deg, hsl(${hashToHue(thread.author_id)},75%,52%), hsl(${(hashToHue(thread.author_id) + 30) % 360},75%,55%))` }}
-              >
+              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold ${hashToAvatarColor(thread.author_id).bg} ${hashToAvatarColor(thread.author_id).text}`}>
                 {(thread.author_name ?? thread.author_email ?? "?").slice(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
@@ -194,7 +195,9 @@ export default function ForumThreadPage() {
             {replyToPost && (
               <div className="mb-2 flex items-center gap-2 rounded-xl bg-rose-50 px-3 py-1.5 text-xs text-rose-700">
                 Trả lời {replyToPost.author_name ?? "bình luận"}
-                <button onClick={() => setReplyTo(null)} className="ml-auto text-rose-400 hover:text-rose-600">✕</button>
+                <button onClick={() => setReplyTo(null)} className="ml-auto text-rose-400 hover:text-rose-600">
+                  <X size={13} strokeWidth={2} />
+                </button>
               </div>
             )}
             <div className="flex gap-2">
@@ -216,7 +219,7 @@ export default function ForumThreadPage() {
                 disabled={sending || !reply.trim()}
                 className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-6px_rgba(225,29,72,0.6)] hover:from-rose-500 hover:to-rose-400 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <SendIcon />
+                <Send size={14} strokeWidth={2} />
                 Gửi
               </button>
             </div>
@@ -235,7 +238,7 @@ function PostCard(props: {
   isReply?: boolean;
 }) {
   const { post, isOwn, onReply, onDelete, isReply } = props;
-  const hue = hashToHue(post.author_id);
+  const avatar = hashToAvatarColor(post.author_id);
   const initials = (post.author_name ?? post.author_email ?? "?").slice(0, 2).toUpperCase();
 
   return (
@@ -244,10 +247,7 @@ function PostCard(props: {
       isReply ? "border-black/3 bg-slate-50/60" : "border-black/5",
     ].join(" ")}>
       <div className="flex items-start gap-3">
-        <div
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[10px] font-bold text-white"
-          style={{ background: `linear-gradient(135deg, hsl(${hue},70%,52%), hsl(${(hue + 25) % 360},70%,55%))` }}
-        >
+        <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[10px] font-bold ${avatar.bg} ${avatar.text}`}>
           {initials}
         </div>
         <div className="min-w-0 flex-1">
@@ -282,12 +282,6 @@ function PostCard(props: {
   );
 }
 
-function hashToHue(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 360;
-}
-
 function getTimeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -298,13 +292,4 @@ function getTimeAgo(dateStr: string): string {
   const days = Math.floor(hrs / 24);
   if (days < 30) return `${days} ngày trước`;
   return new Date(dateStr).toLocaleDateString("vi-VN");
-}
-
-function SendIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M22 2 11 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M22 2 15 22 11 13 2 9l20-7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }

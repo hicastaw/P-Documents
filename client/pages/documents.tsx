@@ -18,6 +18,7 @@ import { UploadModal } from "../components/documents/UploadModal";
 import { DocDetailModal } from "../components/documents/DocDetailModal";
 import { ReportModal } from "../components/documents/ReportModal";
 import { SearchIcon, SpinIcon, UploadBigIcon, UploadIcon } from "../components/documents/icons";
+import { CheckCircle2, AlertCircle, X, FileText, Star, Download } from "lucide-react";
 
 export default function DocumentsPage() {
   const auth = useRequireAuth();
@@ -122,7 +123,7 @@ export default function DocumentsPage() {
       });
 
       setUploadProgress(100);
-      showToast(`✓ Đã tải lên "${title || file.name}" thành công!`);
+      showToast(`Đã tải lên "${title || file.name}" thành công!`);
       await load();
     } catch (err: any) {
       const raw = err?.message ?? "unknown";
@@ -224,6 +225,8 @@ export default function DocumentsPage() {
   // dấu tiếng Việt) trong load() — không lọc lại bằng .includes() ở đây, vì điều đó sẽ
   // loại bỏ chính những kết quả mà tìm kiếm ngữ nghĩa/không dấu vừa tìm ra đúng.
   const filtered = docs.filter((d) => !filterCategory || d.category_slug === filterCategory);
+  const totalStars = docs.reduce((s, d) => s + (d.stars || 0), 0);
+  const totalDownloads = docs.reduce((s, d) => s + (d.downloads || 0), 0);
 
   return (
     <AppShell
@@ -287,6 +290,28 @@ export default function DocumentsPage() {
       }
     >
       <div className="grid gap-4">
+        {/* Quick stats */}
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: "Tài liệu", value: docs.length, Icon: FileText, chip: "bg-rose-50 text-rose-600" },
+            { label: "Lượt star", value: totalStars, Icon: Star, chip: "bg-amber-50 text-amber-600" },
+            { label: "Lượt tải", value: totalDownloads, Icon: Download, chip: "bg-sky-50 text-sky-600" },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center gap-3 rounded-2xl border border-black/5 bg-white/80 p-4 shadow-sm"
+            >
+              <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${s.chip}`}>
+                <s.Icon size={18} strokeWidth={1.8} />
+              </div>
+              <div>
+                <div className="text-lg font-bold text-slate-900">{s.value}</div>
+                <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
         {/* Upload progress bar */}
         {uploading && (
           <div className="overflow-hidden rounded-2xl border border-rose-100 bg-white shadow-sm animate-fadeIn">
@@ -306,18 +331,20 @@ export default function DocumentsPage() {
 
         {/* Toast */}
         {toast && (
-          <div className="fixed bottom-8 right-8 z-[9999] flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800 shadow-[0_8px_30px_rgb(0,0,0,0.12)] animate-fadeIn">
-            <span className="shrink-0 text-emerald-600">✨</span>
-            {toast.replace(/^✓\s*/, "")}
+          <div className="fixed bottom-8 right-8 z-[9999] flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-sm font-semibold text-emerald-800 shadow-popover animate-fadeIn">
+            <CheckCircle2 size={18} strokeWidth={2} className="shrink-0 text-emerald-600" />
+            {toast}
           </div>
         )}
 
         {/* Error */}
         {error && (
           <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 animate-fadeIn">
-            <span className="mt-0.5 shrink-0">⚠</span>
+            <AlertCircle size={16} strokeWidth={2} className="mt-0.5 shrink-0" />
             <span>{error}</span>
-            <button onClick={() => setError(null)} className="ml-auto shrink-0 text-red-400 hover:text-red-600">✕</button>
+            <button onClick={() => setError(null)} className="ml-auto shrink-0 text-red-400 hover:text-red-600">
+              <X size={14} strokeWidth={2} />
+            </button>
           </div>
         )}
 
@@ -329,13 +356,13 @@ export default function DocumentsPage() {
             onDrop={onDrop}
             onClick={() => fileInputRef.current?.click()}
             className={[
-              "flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-all",
+              "flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-all bg-gradient-to-b",
               dragOver
-                ? "border-rose-400 bg-rose-50/60"
-                : "border-slate-200 bg-white/50 hover:border-rose-300 hover:bg-rose-50/30",
+                ? "border-rose-400 from-rose-50 to-rose-50/40"
+                : "border-rose-200/70 from-rose-50/50 to-white hover:border-rose-300 hover:from-rose-50",
             ].join(" ")}
           >
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-rose-50 text-rose-500">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-rose-600 to-rose-500 text-white shadow-[0_8px_18px_-8px_rgba(225,29,72,0.5)]">
               <UploadBigIcon />
             </div>
             <div className="text-sm font-semibold text-slate-700">

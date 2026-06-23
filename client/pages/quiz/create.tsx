@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { AppShell } from "../../components/shell/AppShell";
 import { createQuiz } from "../../services/quizApi";
 import { useRequireAuth } from "../../hooks/use-require-auth";
+import { AlertCircle, X, Check } from "lucide-react";
 
 type Answer = { text: string; isCorrect: boolean };
 type Question = {
@@ -152,8 +153,10 @@ export default function CreateQuizPage() {
         {/* Error */}
         {error && (
           <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 animate-fadeIn">
-            <span>⚠</span> {error}
-            <button type="button" onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+            <AlertCircle size={16} strokeWidth={2} className="shrink-0" /> {error}
+            <button type="button" onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+              <X size={14} strokeWidth={2} />
+            </button>
           </div>
         )}
 
@@ -225,7 +228,9 @@ export default function CreateQuizPage() {
             disabled={submitting}
             className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-6px_rgba(225,29,72,0.6)] hover:from-rose-500 hover:to-rose-400 transition disabled:opacity-60"
           >
-            {submitting ? "Đang lưu..." : "✓ Lưu quiz"}
+            {submitting ? "Đang lưu..." : (
+              <span className="flex items-center gap-1.5"><Check size={14} strokeWidth={2.5} /> Lưu quiz</span>
+            )}
           </button>
         </div>
       </form>
@@ -310,7 +315,7 @@ function QuestionCard({
                 ].join(" ")}
                 title="Đánh dấu là đúng"
               >
-                {ans.isCorrect && <span className="text-[9px]">✓</span>}
+                {ans.isCorrect && <Check size={11} strokeWidth={3} />}
               </button>
               {/* Text */}
               <input

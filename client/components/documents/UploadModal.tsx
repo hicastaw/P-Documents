@@ -1,5 +1,7 @@
 import { CATEGORIES, fmtSize } from "./utils";
 import { UploadIcon } from "./icons";
+import { ModalPortal } from "../shell/ModalPortal";
+import { FileText, X } from "lucide-react";
 
 export function UploadModal({
   file,
@@ -23,12 +25,24 @@ export function UploadModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fadeIn">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border border-black/5 overflow-hidden">
+    <ModalPortal>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm animate-fadeIn">
+      <div className="fixed inset-0" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-2xl bg-white shadow-2xl border border-black/5 overflow-hidden animate-scaleIn">
         {/* Header */}
-        <div className="bg-gradient-to-r from-rose-600 to-rose-500 px-6 py-4">
-          <h3 className="text-lg font-bold text-white">📄 Thông tin tài liệu</h3>
-          <p className="text-xs text-rose-100 mt-0.5">{file.name} · {fmtSize(file.size)}</p>
+        <div className="flex items-center justify-between border-b border-black/5 px-6 py-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-base font-bold text-slate-800">
+              <FileText size={16} strokeWidth={1.8} className="text-slate-400" /> Thông tin tài liệu
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-400">{file.name} · {fmtSize(file.size)}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+          >
+            <X size={16} strokeWidth={2} />
+          </button>
         </div>
 
         <div className="p-6 grid gap-4">
@@ -90,5 +104,6 @@ export function UploadModal({
         </div>
       </div>
     </div>
+    </ModalPortal>
   );
 }

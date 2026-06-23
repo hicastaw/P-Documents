@@ -23,11 +23,7 @@ body {
 }
 
 .bg-pdocs {
-  background:
-    radial-gradient(1200px 600px at 20% 5%, rgba(244, 63, 94, 0.12), transparent 55%),
-    radial-gradient(900px 520px at 95% 20%, rgba(14, 165, 233, 0.10), transparent 52%),
-    radial-gradient(900px 520px at 45% 90%, rgba(16, 185, 129, 0.08), transparent 55%),
-    linear-gradient(180deg, #f8fafc, #f1f5f9);
+  background: #f8fafc;
   min-height: 100vh;
 }
 
@@ -47,11 +43,6 @@ body {
   to { opacity: 1; transform: scale(1); }
 }
 
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
@@ -68,7 +59,5 @@ body {
 
 /* Progress bar */
 .progress-bar {
-  background: linear-gradient(90deg, #e11d48, #f43f5e, #fb7185, #f43f5e, #e11d48);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s linear infinite;
+  background: #e11d48;
 }

@@ -3,6 +3,7 @@ import { AppShell } from "../components/shell/AppShell";
 import { API_BASE, apiJsonAuth } from "../services/api";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { useRouter } from "next/router";
+import { FileText, Users, Flag } from "lucide-react";
 
 type Stats = { users: number; documents: number; reports: number };
 type Report = {
@@ -147,15 +148,17 @@ export default function AdminDashboard() {
               {tab === "stats" && stats && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                   {[
-                    { label: "Tài liệu hệ thống", value: stats.documents, icon: "📄" },
-                    { label: "Tổng người dùng", value: stats.users, icon: "👥" },
-                    { label: "Báo cáo chờ", value: stats.reports, icon: "🚩", highlight: true },
+                    { label: "Tài liệu hệ thống", value: stats.documents, Icon: FileText },
+                    { label: "Tổng người dùng", value: stats.users, Icon: Users },
+                    { label: "Báo cáo chờ", value: stats.reports, Icon: Flag, highlight: true },
                   ].map((s) => (
                     <div
                       key={s.label}
                       className="rounded-2xl border border-black/5 bg-slate-50 p-6 transition-all hover:bg-white hover:shadow-sm"
                     >
-                      <div className="text-2xl">{s.icon}</div>
+                      <div className={["grid h-10 w-10 place-items-center rounded-xl", s.highlight ? "bg-rose-50 text-rose-600" : "bg-white text-slate-400"].join(" ")}>
+                        <s.Icon size={20} strokeWidth={1.8} />
+                      </div>
                       <div className={["mt-3 text-3xl font-bold", s.highlight ? "text-rose-600" : "text-slate-900"].join(" ")}>{s.value}</div>
                       <div className="mt-1 text-xs text-slate-500 uppercase tracking-wider font-semibold">{s.label}</div>
                     </div>

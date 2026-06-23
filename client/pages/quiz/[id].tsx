@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import { AppShell } from "../../components/shell/AppShell";
 import { getQuiz, getLeaderboard, getHistory, submitQuiz } from "../../services/quizApi";
 import { useRequireAuth } from "../../hooks/use-require-auth";
+import { ArrowLeft, AlertCircle, X, PartyPopper, ThumbsUp, Flame, Clock, BarChart3, RotateCcw, CheckCircle2, Trophy, ClipboardList } from "lucide-react";
 
 type QuizDetail = {
   id: string;
@@ -151,31 +152,35 @@ export default function QuizAttemptPage() {
         {/* Main content */}
         <div className="grid gap-5">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Link className="font-semibold text-rose-700 underline decoration-rose-300" href="/quiz">
-              ← Quay lại danh sách
+            <Link className="flex items-center gap-1.5 font-semibold text-rose-700 underline decoration-rose-300" href="/quiz">
+              <ArrowLeft size={14} strokeWidth={2} /> Quay lại danh sách
             </Link>
           </div>
 
           {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              ⚠ {error}
-              <button onClick={() => setError(null)} className="ml-2 text-red-400 hover:text-red-600">✕</button>
+            <div className="flex items-center gap-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <AlertCircle size={16} strokeWidth={2} className="shrink-0" /> {error}
+              <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+                <X size={14} strokeWidth={2} />
+              </button>
             </div>
           )}
 
           {/* Score result */}
           {submitted && score !== null && (
-            <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 text-center animate-fadeIn">
-              <div className="text-5xl mb-2">{scorePercent >= 70 ? "🎉" : scorePercent >= 40 ? "👍" : "💪"}</div>
+            <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center animate-fadeIn">
+              <div className="mx-auto mb-2 grid h-14 w-14 place-items-center rounded-2xl bg-white text-emerald-600">
+                {scorePercent >= 70 ? <PartyPopper size={26} strokeWidth={1.8} /> : scorePercent >= 40 ? <ThumbsUp size={26} strokeWidth={1.8} /> : <Flame size={26} strokeWidth={1.8} />}
+              </div>
               <div className="text-2xl font-bold text-slate-900">
                 {score} / {totalQuestions}
               </div>
               <div className="mt-2 flex items-center justify-center gap-4 text-sm">
                 <span className="flex items-center gap-1.5 rounded-xl bg-white/70 px-3 py-1.5 font-semibold text-slate-700">
-                  ⏱ {fmtTimer(timeTaken)}
+                  <Clock size={14} strokeWidth={2} /> {fmtTimer(timeTaken)}
                 </span>
                 <span className="flex items-center gap-1.5 rounded-xl bg-white/70 px-3 py-1.5 font-semibold text-emerald-700">
-                  📊 {scorePercent}%
+                  <BarChart3 size={14} strokeWidth={2} /> {scorePercent}%
                 </span>
               </div>
               <div className="mt-2 text-sm text-slate-600">
@@ -183,7 +188,7 @@ export default function QuizAttemptPage() {
               </div>
               <div className="mt-3 h-3 rounded-full bg-white/60 overflow-hidden max-w-xs mx-auto">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700"
+                  className="h-full rounded-full bg-emerald-500 transition-all duration-700"
                   style={{ width: `${scorePercent}%` }}
                 />
               </div>
@@ -191,7 +196,7 @@ export default function QuizAttemptPage() {
                 onClick={() => { setSubmitted(false); setScore(null); setTimeTaken(0); setAnswers(new Array(totalQuestions).fill(null)); setTimeLeftSec(QUIZ_DURATION); }}
                 className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_4px_14px_-6px_rgba(225,29,72,0.6)] hover:from-rose-500 hover:to-rose-400 transition"
               >
-                🔄 Làm lại
+                <RotateCcw size={14} strokeWidth={2} /> Làm lại
               </button>
             </div>
           )}
@@ -226,7 +231,7 @@ export default function QuizAttemptPage() {
                   onClick={submit}
                   disabled={timeLeftSec === 0}
                 >
-                  ✅ Nộp bài
+                  <CheckCircle2 size={16} strokeWidth={2} className="inline mr-1.5 -mt-0.5" /> Nộp bài
                 </button>
               </div>
             </section>
@@ -244,7 +249,7 @@ export default function QuizAttemptPage() {
           {/* Leaderboard */}
           <div className="rounded-2xl border border-black/5 bg-white/80 p-4 backdrop-blur">
             <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
-              <span>🏆</span> Bảng xếp hạng
+              <Trophy size={14} strokeWidth={2} /> Bảng xếp hạng
             </div>
             {leaderboard.length > 0 ? (
               <div className="grid gap-1.5 max-h-[320px] overflow-y-auto">
@@ -270,8 +275,8 @@ export default function QuizAttemptPage() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="truncate">{entry.displayName}</div>
-                      <div className="text-[10px] text-slate-400">
-                        ⏱ {fmtTimer(entry.timeTaken)} · {new Date(entry.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                        <Clock size={10} strokeWidth={2} /> {fmtTimer(entry.timeTaken)} · {new Date(entry.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                       </div>
                     </div>
                     <span className="shrink-0 text-xs font-semibold text-rose-600">{entry.score} đ</span>
@@ -286,14 +291,14 @@ export default function QuizAttemptPage() {
           {/* History */}
           <div className="rounded-2xl border border-black/5 bg-white/80 p-4 backdrop-blur">
             <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-slate-500">
-              <span>📋</span> Lịch sử làm bài
+              <ClipboardList size={14} strokeWidth={2} /> Lịch sử làm bài
             </div>
             {history.length > 0 ? (
               <div className="grid gap-1.5 max-h-[300px] overflow-y-auto">
                 {history.map((a) => (
                   <div key={a.id} className="flex items-center gap-3 rounded-xl bg-slate-50 px-3 py-2 text-sm">
                     <span className="text-xs font-semibold text-rose-600">{a.score} đ</span>
-                    <span className="text-[10px] text-slate-400">⏱ {fmtTimer(a.time_taken_seconds)}</span>
+                    <span className="flex items-center gap-1 text-[10px] text-slate-400"><Clock size={10} strokeWidth={2} /> {fmtTimer(a.time_taken_seconds)}</span>
                     <span className="flex-1 text-xs text-slate-500 text-right">
                       {new Date(a.created_at).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </span>

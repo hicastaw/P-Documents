@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { AppShell } from "../components/shell/AppShell";
 import { API_BASE, apiJsonAuth } from "../services/api";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { hashToAvatarColor } from "../utils/colors";
+import { PenSquare, AlertCircle, X, MessageSquare } from "lucide-react";
 
 type Thread = {
   id: string;
@@ -110,7 +112,9 @@ export default function ForumPage() {
         {/* Create thread form */}
         {showCreate && (
           <div className="rounded-2xl border border-rose-100 bg-white p-5 animate-fadeIn shadow-sm">
-            <div className="text-sm font-bold text-slate-800 mb-3">✏️ Tạo chủ đề mới</div>
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-800 mb-3">
+              <PenSquare size={15} strokeWidth={2} /> Tạo chủ đề mới
+            </div>
             <input
               className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-rose-300 focus:ring-4 focus:ring-rose-100 transition mb-3"
               placeholder="Tiêu đề chủ đề..."
@@ -144,8 +148,10 @@ export default function ForumPage() {
         {/* Error */}
         {error && (
           <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            <span>⚠</span> {error}
-            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">✕</button>
+            <AlertCircle size={16} strokeWidth={2} className="shrink-0" /> {error}
+            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+              <X size={14} strokeWidth={2} />
+            </button>
           </div>
         )}
 
@@ -167,7 +173,9 @@ export default function ForumPage() {
           </div>
         ) : (
           <div className="py-16 text-center">
-            <div className="text-4xl mb-3">💬</div>
+            <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+              <MessageSquare size={22} strokeWidth={1.8} />
+            </div>
             <div className="text-sm font-semibold text-slate-600 mb-1">
               {q ? "Không tìm thấy chủ đề phù hợp" : "Chưa có chủ đề nào"}
             </div>
@@ -182,19 +190,16 @@ export default function ForumPage() {
 }
 
 function ThreadCard({ thread }: { thread: Thread }) {
-  const hue = hashToHue(thread.id);
+  const avatar = hashToAvatarColor(thread.id);
   const initials = (thread.author_name ?? thread.author_email ?? "?").slice(0, 2).toUpperCase();
   const timeAgo = getTimeAgo(thread.updated_at);
 
   return (
     <Link
       href={`/forum/${thread.id}`}
-      className="group flex items-start gap-4 rounded-2xl border border-black/5 bg-white p-4 shadow-[0_4px_20px_-12px_rgba(2,6,23,0.12)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-16px_rgba(2,6,23,0.22)]"
+      className="group flex items-start gap-4 rounded-2xl border border-black/5 bg-white p-4 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-popover"
     >
-      <div
-        className="grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold text-white"
-        style={{ background: `linear-gradient(135deg, hsl(${hue},75%,52%), hsl(${(hue + 30) % 360},75%,55%))` }}
-      >
+      <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold ${avatar.bg} ${avatar.text}`}>
         {initials}
       </div>
       <div className="min-w-0 flex-1">
@@ -213,12 +218,6 @@ function ThreadCard({ thread }: { thread: Thread }) {
       </div>
     </Link>
   );
-}
-
-function hashToHue(id: string) {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 360;
 }
 
 function getTimeAgo(dateStr: string): string {

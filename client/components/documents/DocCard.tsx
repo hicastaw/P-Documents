@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { Doc } from "../../services/documentsApi";
 import { getDownloadUrl } from "../../services/documentsApi";
-import { CATEGORIES, fmtDate, fmtSize, hashToHue } from "./utils";
+import { CATEGORIES, fmtDate, fmtSize, getCategoryColor } from "./utils";
 import { DownloadIcon, DownloadSmallIcon, StarIcon } from "./icons";
+import { FileText } from "lucide-react";
 
 const STATUS_LABEL: Record<string, string> = {
   uploaded: "Đã upload",
@@ -21,9 +22,8 @@ export function DocCard({ doc, onOpen }: { doc: Doc; onOpen?: () => void }) {
   const [downloading, setDownloading] = useState(false);
   const [dlError, setDlError] = useState<string | null>(null);
 
-  const hue = hashToHue(doc.id);
-  const banner = `linear-gradient(135deg, hsla(${hue},85%,52%,0.92), hsla(${(hue + 35) % 360},85%,55%,0.80))`;
   const initials = (doc.uploader_name ?? doc.uploader_email ?? "?").slice(0, 2).toUpperCase();
+  const color = getCategoryColor(doc.category_slug);
 
   async function handleDownload() {
     setDlError(null);
@@ -41,15 +41,17 @@ export function DocCard({ doc, onOpen }: { doc: Doc; onOpen?: () => void }) {
   return (
     <div
       onClick={() => onOpen && onOpen()}
-      className="group overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_4px_24px_-12px_rgba(2,6,23,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_36px_-16px_rgba(2,6,23,0.28)] cursor-pointer"
+      className="group overflow-hidden rounded-2xl border border-black/5 bg-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-popover cursor-pointer"
     >
       {/* Banner */}
-      <div className="relative h-20 flex items-end p-3" style={{ background: banner }}>
-        <div className="absolute inset-0 opacity-20 [background:radial-gradient(600px_120px_at_10%_10%,white,transparent)]" />
+      <div className={`relative h-20 flex items-start justify-between bg-gradient-to-br ${color.banner} to-white p-3`}>
+        <div className={`grid h-10 w-10 place-items-center rounded-xl ${color.chip} ${color.icon}`}>
+          <FileText size={20} strokeWidth={1.8} />
+        </div>
         <span
           className={[
-            "relative rounded-lg px-2 py-0.5 text-[11px] font-semibold",
-            STATUS_COLOR[doc.status] ?? "bg-white/80 text-slate-700",
+            "rounded-lg px-2 py-0.5 text-[11px] font-semibold",
+            STATUS_COLOR[doc.status] ?? "bg-white text-slate-700",
           ].join(" ")}
         >
           {STATUS_LABEL[doc.status] ?? doc.status}
@@ -62,7 +64,7 @@ export function DocCard({ doc, onOpen }: { doc: Doc; onOpen?: () => void }) {
             {doc.title}
           </div>
           {doc.category_slug && (
-            <span className="shrink-0 inline-flex items-center rounded-md bg-rose-50 px-2 py-0.5 text-[10px] font-medium text-rose-600 ring-1 ring-inset ring-rose-500/10">
+            <span className={`shrink-0 inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset ${color.badge} ${color.ring}`}>
               {doc.category_name || CATEGORIES.find((c) => c.value === doc.category_slug)?.label || doc.category_slug}
             </span>
           )}
@@ -79,11 +81,15 @@ export function DocCard({ doc, onOpen }: { doc: Doc; onOpen?: () => void }) {
           <span className="shrink-0 text-xs text-slate-400">{fmtSize(doc.size)}</span>
         </div>
 
-        <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+        <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
           <span>{fmtDate(doc.created_at)}</span>
-          <div className="flex gap-2.5 font-medium">
-            <span className="flex items-center gap-1 text-amber-500/80"><StarIcon /> {doc.stars}</span>
-            <span className="flex items-center gap-1"><DownloadSmallIcon /> {doc.downloads}</span>
+          <div className="flex gap-1.5 font-semibold">
+            <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-amber-600">
+              <StarIcon /> {doc.stars}
+            </span>
+            <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+              <DownloadSmallIcon /> {doc.downloads}
+            </span>
           </div>
         </div>
 

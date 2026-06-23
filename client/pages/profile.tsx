@@ -3,6 +3,7 @@ import { AppShell } from "../components/shell/AppShell";
 import { apiJsonAuth } from "../services/api";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { useAuth } from "../hooks/auth-context";
+import { Check, FileText, ArrowRight } from "lucide-react";
 
 type Doc = {
   id: string;
@@ -140,7 +141,9 @@ export default function ProfilePage() {
                 <div className="grid h-20 w-20 place-items-center rounded-2xl bg-gradient-to-br from-rose-600 to-rose-500 text-2xl font-bold text-white shadow-[0_14px_30px_-10px_rgba(225,29,72,0.5)]">
                   {avatarText}
                 </div>
-                <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-[10px] text-white">✓</div>
+                <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-emerald-500 text-white">
+                  <Check size={12} strokeWidth={3} />
+                </div>
               </div>
               <div>
                 <div className="text-base font-bold text-slate-900">{user.display_name || "Người dùng"}</div>
@@ -163,12 +166,12 @@ export default function ProfilePage() {
           {/* Success toasts */}
           {nameSuccess && (
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 animate-fadeIn">
-              ✓ Đã cập nhật tên hiển thị.
+              <Check size={15} strokeWidth={2.5} /> Đã cập nhật tên hiển thị.
             </div>
           )}
           {passSuccess && (
             <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 animate-fadeIn">
-              ✓ Đã đổi mật khẩu thành công.
+              <Check size={15} strokeWidth={2.5} /> Đã đổi mật khẩu thành công.
             </div>
           )}
 
@@ -189,7 +192,7 @@ export default function ProfilePage() {
                     <div className="text-sm font-semibold text-slate-800">Tên hiển thị</div>
                     <div className="text-xs text-slate-500 mt-0.5">{user.display_name || "—"}</div>
                   </div>
-                  <span className="text-xs font-semibold text-rose-600 group-hover:text-rose-500">Sửa →</span>
+                  <span className="flex items-center gap-1 text-xs font-semibold text-rose-600 group-hover:text-rose-500">Sửa <ArrowRight size={12} strokeWidth={2} /></span>
                 </button>
 
                 <button
@@ -200,7 +203,7 @@ export default function ProfilePage() {
                     <div className="text-sm font-semibold text-slate-800">Mật khẩu</div>
                     <div className="text-xs text-slate-500 mt-0.5">••••••••</div>
                   </div>
-                  <span className="text-xs font-semibold text-rose-600 group-hover:text-rose-500">Đổi →</span>
+                  <span className="flex items-center gap-1 text-xs font-semibold text-rose-600 group-hover:text-rose-500">Đổi <ArrowRight size={12} strokeWidth={2} /></span>
                 </button>
 
                 <div className="flex items-center justify-between rounded-xl border border-black/5 bg-slate-50 px-4 py-3">
@@ -341,7 +344,9 @@ export default function ProfilePage() {
                   key={d.id}
                   className="flex items-center gap-3 rounded-xl border border-black/5 bg-slate-50 px-3 py-2.5 hover:bg-slate-100 transition"
                 >
-                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-base shadow-sm">📄</div>
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white text-slate-400 shadow-sm">
+                    <FileText size={16} strokeWidth={1.8} />
+                  </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-slate-800">{d.title}</div>
                     <div className="text-[11px] text-slate-400">

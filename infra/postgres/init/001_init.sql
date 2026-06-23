@@ -120,9 +120,15 @@ DECLARE
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM users WHERE id = sys_user_id) THEN
         -- 1. Tạo 1 User mẫu
-        INSERT INTO users (id, email, password_hash, display_name, role) 
+        INSERT INTO users (id, email, password_hash, display_name, role)
         VALUES (sys_user_id, 'system@pdocs.local', 'fake_hash', 'Hệ Thống PDOCS', 'admin');
-        
+
+        -- 1b. Tài khoản admin đăng nhập được để test giao diện /admin
+        -- password_hash là bcrypt('admin', 10 rounds) — khớp bcryptjs dùng trong auth.service.ts
+        INSERT INTO users (email, password_hash, display_name, role)
+        VALUES ('admin@pdocs.local', '$2a$10$lGF.oqWjwlYl9eXATyBFTOimyzUU1qbAqPA/vD2uIQAsokYraSqQi', 'Admin', 'admin')
+        ON CONFLICT (email) DO NOTHING;
+
         -- 2. Tạo 3 Quizzes mẫu
         INSERT INTO quizzes (title, subject, questions, created_by) VALUES 
         ('Kiến thức lập trình cơ bản', 'Công nghệ', '[{"q": "HTTP là viết tắt của gì?", "options": ["HyperText Transfer Protocol", "High Tech Transfer Protocol", "Hyper Transfer Technology Protocol", "None"], "correct": "HyperText Transfer Protocol"}, {"q": "Ngôn ngữ nào được dùng để tạo trang web?", "options": ["HTML", "SQL", "Python", "Java"], "correct": "HTML"}, {"q": "CSS là gì?", "options": ["Cascading Style Sheets", "Computer Style Syntax", "Creative Style System", "None"], "correct": "Cascading Style Sheets"}]'::jsonb, sys_user_id),
