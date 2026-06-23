@@ -7,6 +7,12 @@ import { Client as MinioClient } from "minio";
 import pdfParse from "pdf-parse";
 import { loadEnv } from "./config/env";
 import { batchEmbeddings } from "./embedder";
+import {
+  startMetricsServer,
+  documentsProcessedTotal,
+  documentsFailedTotal,
+  documentProcessingDurationSeconds,
+} from "./metrics";
 
 const env = loadEnv();
 
@@ -29,6 +35,8 @@ const minio = new MinioClient({
 });
 
 const QUEUE = "document_uploaded";
+const DLQ = "document_uploaded.dlq";
+const MAX_RETRIES = 3;
 
 async function hashObject(objectKey: string): Promise<{ sha256: string; bytes: number; buffer: Buffer }> {
   const stream = await minio.getObject(env.MINIO_BUCKET, objectKey);
@@ -76,7 +84,9 @@ async function processDocument(documentId: string) {
 
   await pool.query("UPDATE documents SET sha256=$1, status='approved' WHERE id=$2", [sha256, documentId]);
 
-  // Phase 5: extract + chunk PDF, tạo embedding AI rồi lưu vào DB
+  // Phase 5: extract + chunk PDF, tạo embedding AI rồi lưu vào DB.
+  // Lỗi ở bước này được re-throw (không nuốt âm thầm như trước) để
+  // ch.consume ở main() quyết định retry hay đẩy vào Dead Letter Queue.
   try {
     const parsed = await pdfParse(buffer);
     const chunks = chunkText(parsed.text || "");
@@ -101,12 +111,16 @@ async function processDocument(documentId: string) {
       );
     }
 
+    await pool.query("UPDATE documents SET chunk_status='completed' WHERE id=$1", [documentId]);
+    documentsProcessedTotal.inc();
+
     console.log(
       `[Worker] Document ${documentId}: ${chunks.length} chunks, ` +
       `embedding: ${apiKey ? "✓ AI vector" : "✗ skipped (no API key)"}`,
     );
   } catch (err) {
     console.warn("[Worker] Extract/embed failed for", documentId, err);
+    throw err;
   }
 
   // Minimal trust score example (Phase 4 placeholder)
@@ -126,11 +140,50 @@ async function connectWithRetry(url: string, retries = 5) {
   throw new Error("Failed to connect to AMQP");
 }
 
+/**
+ * Lỗi extract/chunk/embed (đã re-throw từ processDocument) được retry với
+ * backoff tăng dần (header x-retry-count trên message); hết MAX_RETRIES thì
+ * đẩy nguyên message vào Dead Letter Queue + đánh dấu chunk_status='failed'
+ * để không còn mất message/lỗi âm thầm như trước.
+ */
+async function handleProcessingFailure(
+  ch: amqp.Channel,
+  msg: amqp.ConsumeMessage,
+  documentId: string,
+  retryCount: number,
+  err: unknown,
+) {
+  if (retryCount < MAX_RETRIES) {
+    documentsFailedTotal.inc({ stage: "retry" });
+    ch.ack(msg);
+    const delayMs = 2000 * 2 ** retryCount;
+    setTimeout(() => {
+      ch.sendToQueue(QUEUE, msg.content, {
+        persistent: true,
+        headers: { "x-retry-count": retryCount + 1 },
+      });
+    }, delayMs);
+    console.warn(`[Worker] Retry ${retryCount + 1}/${MAX_RETRIES} for ${documentId} in ${delayMs}ms`);
+    return;
+  }
+
+  documentsFailedTotal.inc({ stage: "dlq" });
+  console.error(`[Worker] Document ${documentId} failed after ${MAX_RETRIES} retries — sending to DLQ`, err);
+  ch.sendToQueue(DLQ, msg.content, {
+    persistent: true,
+    headers: { "x-retry-count": retryCount, "x-failed-reason": String(err) },
+  });
+  await pool.query("UPDATE documents SET chunk_status='failed' WHERE id=$1", [documentId]);
+  ch.ack(msg);
+}
+
 async function main() {
+  startMetricsServer(env.METRICS_PORT);
   await redis.connect();
   const conn = await connectWithRetry(env.RABBITMQ_URL);
   const ch = await conn.createChannel();
   await ch.assertQueue(QUEUE, { durable: true });
+  await ch.assertQueue(DLQ, { durable: true });
   ch.prefetch(1);
 
   // eslint-disable-next-line no-console
@@ -140,15 +193,27 @@ async function main() {
     QUEUE,
     async (msg) => {
       if (!msg) return;
+      const retryCount = (msg.properties.headers?.["x-retry-count"] as number) ?? 0;
+
+      let documentId: string;
       try {
         const payload = JSON.parse(msg.content.toString("utf-8"));
-        const documentId = payload.documentId as string;
-        await processDocument(documentId);
-        ch.ack(msg);
+        documentId = payload.documentId as string;
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.error("Worker error", e);
+        console.error("Worker error: invalid message payload", e);
         ch.nack(msg, false, false);
+        return;
+      }
+
+      const endTimer = documentProcessingDurationSeconds.startTimer();
+      try {
+        await processDocument(documentId);
+        endTimer();
+        ch.ack(msg);
+      } catch (err) {
+        endTimer();
+        await handleProcessingFailure(ch, msg, documentId, retryCount, err);
       }
     },
     { noAck: false },

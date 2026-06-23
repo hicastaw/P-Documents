@@ -20,11 +20,11 @@ Hệ thống bao gồm các thành phần phối hợp chặt chẽ với nhau:
 
 **\- PostgreSQL \+ pgvector:** Lưu trữ toàn bộ dữ liệu quan hệ (tài khoản, tài liệu, quiz, forum) và chunks văn bản trích xuất từ PDF (phục vụ RAG). Extension pgvector hỗ trợ tìm kiếm vector embedding trực tiếp trong database.
 
-**\- Redis:** Lưu trữ JWT Token Blacklist (phục vụ instant token revocation sau logout): mỗi JWT có jti riêng, khi đăng xuất server thêm jwt:blacklist:{jti} vào Redis với TTL bằng thời gian sống còn lại của token. Mọi request sau đó sẽ bị từ chối dù token vẫn hợp lệ về chữ ký.
+**\- Redis:** Đóng hai vai trò. Thứ nhất, lưu trữ JWT Token Blacklist (phục vụ instant token revocation sau logout): mỗi JWT có jti riêng, khi đăng xuất server thêm jwt:blacklist:{jti} vào Redis với TTL bằng thời gian sống còn lại của token — mọi request sau đó sẽ bị từ chối dù token vẫn hợp lệ về chữ ký. Thứ hai, làm tầng cache cho kết quả tìm kiếm tài liệu (TTL 30 giây theo khóa userId/từ khóa/trang) nhằm giảm tải PostgreSQL khi nhiều người dùng tra cứu trùng truy vấn trong thời gian ngắn (chi tiết tại mục 2.6.4).
 
 **\- RabbitMQ:** Message broker phân tách API Server và Worker Service. Khi tài liệu được xác nhận upload, API chỉ publish một message vào queue và trả về ngay cho Client — Worker sẽ xử lý bất đồng bộ phía sau.
 
-**\- Nginx (Gateway):** Reverse proxy duy nhất lộ ra ngoài internet (host port **8888**, ánh xạ vào container port **80**), định tuyến traffic đến đúng service nội bộ, xử lý WebSocket upgrade header.
+**\- Nginx (Gateway):** Reverse proxy duy nhất lộ ra ngoài internet (host port **8888**, ánh xạ vào container port **80**), định tuyến traffic đến đúng service nội bộ, xử lý WebSocket upgrade header. Đồng thời đóng vai trò Load Balancer thật khi API Server được scale thành nhiều instance: nhờ cấu hình resolver trỏ vào DNS nội bộ của Docker, Nginx tự động chia đều request theo round-robin cho mọi instance API đang chạy (chi tiết và số liệu đo tải thực tế tại mục 2.6.4).
 
 ### ***2.1.2. Sơ đồ kiến trúc tổng quát***
 
@@ -55,6 +55,8 @@ Việc tách biệt xử lý tài liệu sang Worker bất đồng bộ đặt r
 **\- Đảm bảo Idempotency với ON CONFLICT DO UPDATE:** Nếu Worker gặp lỗi giữa chừng và restart, nó có thể chạy lại an toàn toàn bộ pipeline. Câu lệnh INSERT INTO doc\_chunks ... ON CONFLICT DO UPDATE đảm bảo chunk đã tồn tại sẽ được cập nhật thay vì tạo bản ghi trùng lặp.
 
 **\- Đối chiếu trạng thái khi tải lại (Manual Refresh):** Client hiển thị badge "Đã upload" ngay sau khi xác nhận upload thành công. Ở phiên bản hiện tại, người dùng tải lại trang danh sách tài liệu (thủ công) để xem trạng thái mới nhất sau khi Worker xử lý xong (approved/rejected) — chưa có polling tự động hay thông báo WebSocket riêng cho thay đổi trạng thái tài liệu (kênh WebSocket hiện tại chỉ phục vụ leaderboard quiz và thông báo diễn đàn).
+
+**\- Cơ chế Retry và Dead Letter Queue (DLQ) cho lỗi xử lý bất đồng bộ:** Ở phiên bản đầu, lỗi trong bước trích xuất/chunk/embedding (ví dụ file PDF hỏng, API embedding tạm thời lỗi) bị nuốt âm thầm — tài liệu vẫn ở trạng thái approved nhưng có thể 0 chunk dùng được, không ai biết. Phiên bản hiện tại bổ sung cột documents.chunk\_status (pending/completed/failed) tách biệt với status, và khi lỗi xảy ra, Worker không nuốt lỗi mà thử lại tối đa 3 lần với độ trễ tăng dần (2s, 4s, 8s) thông qua header x-retry-count trên message RabbitMQ. Nếu vẫn thất bại sau 3 lần, message được đẩy nguyên vẹn vào hàng đợi dự phòng document\_uploaded.dlq để xem xét/xử lý lại thủ công, đồng thời chunk\_status được đánh dấu failed — đảm bảo không còn lỗi âm thầm và không mất message.
 
 ## **2.2. Phương pháp xây dựng phần mềm**
 
@@ -170,11 +172,11 @@ Module này đóng vai trò là trung tâm điều phối dữ liệu và phát 
 
 **\- Socket.IO Server:** WebSocket server trung tâm, vận hành song song với Express trên cùng HTTP server instance. Quản lý real-time events: emit leaderboard:update đến tất cả Client sau khi có người nộp bài quiz; emit notify:{userId} đến đúng một Client khi có bình luận mới trong thread của họ.
 
-**\- PostgreSQL 16 \+ pgvector:** Hệ quản trị CSDL quan hệ được chọn nhờ ACID compliance, hỗ trợ JSONB (lưu mảng câu hỏi quiz linh hoạt), CASCADE constraints (xóa user kéo theo toàn bộ dữ liệu liên quan atomically), ILIKE search (tìm kiếm tài liệu theo từ khóa \- nếu tìm kiếm thông minh không hợp lệ), UUID primary keys (an toàn khi expose qua API). Extension pgvector cho phép lưu và tìm kiếm vector embedding trực tiếp trong database — không cần database vector riêng (Pinecone, Weaviate), giảm độ phức tạp hạ tầng đáng kể.
+**\- PostgreSQL 16 \+ pgvector:** Hệ quản trị CSDL quan hệ được chọn nhờ ACID compliance, hỗ trợ JSONB (lưu mảng câu hỏi quiz linh hoạt), CASCADE constraints (xóa user kéo theo toàn bộ dữ liệu liên quan atomically), UUID primary keys (an toàn khi expose qua API). Extension pgvector cho phép lưu và tìm kiếm vector embedding trực tiếp trong database — không cần database vector riêng (Pinecone, Weaviate), giảm độ phức tạp hạ tầng đáng kể. Tìm kiếm theo từ khóa sử dụng Full-Text Search có sẵn của PostgreSQL (to\_tsvector/ts\_rank) với GIN index và cấu hình hỗ trợ tiếng Việt không dấu, thay cho ILIKE đơn thuần ở phiên bản đầu (chi tiết tại mục 2.6.2).
 
-**\- Redis 7:** In-memory data store phục vụ một mục đích cốt lõi: **JWT Token Blacklist** — mỗi JWT được cấp một jti (JWT ID) duy nhất; khi đăng xuất, server thêm khóa jwt:blacklist:{jti} vào Redis với TTL bằng đúng thời gian sống còn lại của token. Middleware requireAuth kiểm tra Redis bằng EXISTS O(1) trước mọi request bảo vệ, nhanh hơn query PostgreSQL nhiều bậc và không có race condition.
+**\- Redis 7:** In-memory data store phục vụ hai mục đích: **JWT Token Blacklist** — mỗi JWT được cấp một jti (JWT ID) duy nhất; khi đăng xuất, server thêm khóa jwt:blacklist:{jti} vào Redis với TTL bằng đúng thời gian sống còn lại của token, Middleware requireAuth kiểm tra Redis bằng EXISTS O(1) trước mọi request bảo vệ, nhanh hơn query PostgreSQL nhiều bậc và không có race condition; và **Cache kết quả tìm kiếm tài liệu** với TTL ngắn (30 giây) để giảm tải PostgreSQL trước các truy vấn lặp lại (chi tiết tại mục 2.6.4).
 
-**\- RabbitMQ 3:** AMQP message broker phân tách API Server và Worker. Queue document\_uploaded với durable: true đảm bảo message persist khi RabbitMQ restart. Cơ chế prefetch(1) giới hạn Worker chỉ xử lý một tài liệu tại một thời điểm, tránh OOM khi xử lý file lớn. Management UI (port 15672\) hỗ trợ monitor và debug queue trong quá trình phát triển.
+**\- RabbitMQ 3:** AMQP message broker phân tách API Server và Worker. Queue document\_uploaded với durable: true đảm bảo message persist khi RabbitMQ restart. Cơ chế prefetch(1) giới hạn mỗi Worker chỉ xử lý một tài liệu tại một thời điểm, tránh OOM khi xử lý file lớn — đồng thời cho phép nhiều instance Worker cùng lắng nghe một queue (competing consumers) để scale ngang khi cần. Queue dự phòng document\_uploaded.dlq tiếp nhận message đã thử lại tối đa nhưng vẫn thất bại (chi tiết tại mục 2.1.4). Management UI (port 15672\) hỗ trợ monitor và debug queue trong quá trình phát triển.
 
 **\- MinIO:** Object storage S3-compatible lưu trữ toàn bộ file PDF vật lý. Tính năng Presigned PUT URL cho phép Client upload trực tiếp không qua API Server; Presigned GET URL cho phép Client download an toàn với TTL ngắn. Khi cần nâng cấp lên production, chỉ cần thay endpoint sang AWS S3 mà không sửa code.
 
@@ -184,9 +186,11 @@ Module này đóng vai trò là trung tâm điều phối dữ liệu và phát 
 
 **\- Worker (Node.js \+ TypeScript):** Service độc lập lắng nghe RabbitMQ queue và thực hiện pipeline xử lý tài liệu 4 giai đoạn: streaming SHA-256 hash (crypto module), deduplication (PostgreSQL query), text extraction (pdf-parse), chunking và lưu doc\_chunks (PostgreSQL INSERT với ON CONFLICT DO UPDATE). Worker dùng chung ngôn ngữ TypeScript với API Server để tái sử dụng type definitions.
 
-**\- Nginx 1.26 (Reverse Proxy):** Service duy nhất expose ra ngoài (host port **8888** → container port **80**). Định tuyến / đến Next.js Client (:3001), /api/ đến Express API Server (:3000). Quan trọng: cấu hình proxy\_set\_header Upgrade và Connection "upgrade" để WebSocket hoạt động qua proxy. Service minio\_proxy (nginx riêng biệt) proxy MinIO API trên port **9000** của host.
+**\- Nginx 1.26 (Reverse Proxy & Load Balancer):** Service duy nhất expose ra ngoài (host port **8888** → container port **80**). Định tuyến / đến Next.js Client (:3001), /api/ đến Express API Server (:3000). Quan trọng: cấu hình proxy\_set\_header Upgrade và Connection "upgrade" để WebSocket hoạt động qua proxy. API Server không có host port riêng và dùng resolver DNS nội bộ của Docker (127.0.0.11) kết hợp proxy\_pass qua biến — nhờ đó khi scale API Server thành nhiều instance (docker compose \-\-scale api=N), Nginx tự động round-robin request giữa các instance mà không cần sửa cấu hình. Service minio\_proxy (nginx riêng biệt) proxy MinIO API trên port **9000** của host.
 
-**\- Docker Compose:** Định nghĩa và orchestrate toàn bộ 9-service stack trong một file docker-compose.yml. Cơ chế healthcheck đảm bảo service ứng dụng chỉ khởi động sau khi hạ tầng (PostgreSQL, Redis, MinIO, RabbitMQ) đã sẵn sàng. Volume persistence cho postgres\_data và minio\_data. Network isolation: chỉ Nginx expose port ra ngoài, các service khác chỉ accessible trong Docker network nội bộ.
+**\- Prometheus \+ Grafana (Observability):** Prometheus thu thập định kỳ (10 giây/lần) số liệu vận hành từ API Server, Worker (mỗi service tự expose endpoint /metrics theo chuẩn Prometheus qua thư viện prom-client) và từ exporter có sẵn của PostgreSQL/Redis/RabbitMQ. Grafana hiển thị các số liệu này qua dashboard trực quan (tốc độ request theo route, tỉ lệ cache hit, số tài liệu Worker xử lý thành công/thất bại, số kết nối PostgreSQL đang hoạt động) — giúp quan sát hệ thống đang vận hành thay vì phải đọc log thủ công. Nhóm không triển khai centralized logging (Loki/ELK) hay distributed tracing (OpenTelemetry/Jaeger) vì quy mô hệ thống (dưới 10 service) chưa cần đến mức độ phức tạp đó.
+
+**\- Docker Compose:** Định nghĩa và orchestrate toàn bộ stack (gồm 3 service ứng dụng, 4 hạ tầng lõi, và các exporter/Prometheus/Grafana phục vụ giám sát) trong một file docker-compose.yml. Cơ chế healthcheck đảm bảo service ứng dụng chỉ khởi động sau khi hạ tầng (PostgreSQL, Redis, MinIO, RabbitMQ) đã sẵn sàng. Volume persistence cho postgres\_data và minio\_data. Network isolation: chỉ Nginx expose port ra ngoài cho traffic ứng dụng, các service khác chỉ accessible trong Docker network nội bộ.
 
 | Module | Công nghệ sử dụng | Vai trò và Chức năng chính |
 | :---- | :---- | :---- |
@@ -201,14 +205,67 @@ Module này đóng vai trò là trung tâm điều phối dữ liệu và phát 
 |  | Redis 7 | JWT Blacklist O(1), Trust Score Counter atomic |
 | 4\. Storage | MinIO | S3-compatible Object Storage, Presigned URL |
 | 5\. Messaging | RabbitMQ 3 | AMQP broker, durable queue, prefetch(1) |
-| 6\. AI | FPT Cloud AI API | LLM inference cho RAG pipeline |
-| 7\. Worker | Node.js \+ pdf-parse \+ crypto | SHA-256 hash, dedup, text extract, chunking |
-| 8\. Gateway | Nginx 1.26 | Reverse proxy, WebSocket upgrade, port 8888 |
-| 9\. Infrastructure | Docker Compose | 9-service orchestration, healthcheck, volume, network |
+| 6\. AI \& Tìm kiếm | FPT Cloud AI API | LLM inference \+ embedding cho RAG pipeline |
+|  | PostgreSQL FTS (GIN \+ vi\_unaccent) | Tìm kiếm từ khóa có index, hỗ trợ tiếng Việt không dấu |
+|  | Reciprocal Rank Fusion (RRF) | Kết hợp kết quả tìm kiếm vector \+ từ khóa (chi tiết 2.6.1) |
+| 7\. Worker | Node.js \+ pdf-parse \+ crypto | SHA-256 hash, dedup, text extract, chunking, retry/DLQ |
+| 8\. Gateway | Nginx 1.26 | Reverse proxy, Load Balancer, WebSocket upgrade, port 8888 |
+| 9\. Giám sát | Prometheus \+ Grafana \+ prom-client | Thu thập \& hiển thị metrics vận hành theo thời gian thực |
+| 10\. Infrastructure | Docker Compose | Orchestration toàn bộ stack, healthcheck, volume, network |
 
 **Bảng 2.1: Tổng hợp công nghệ sử dụng cho từng module**
 
-## **2.6. Kết luận Chương 2**
+## **2.6. Giải pháp nâng cao về tìm kiếm, hiệu năng và khả năng mở rộng**
+
+Sau giai đoạn MVP (Sprint 1–5), nhóm rà soát lại các điểm yếu thực tế của hệ thống — đặc biệt phần tìm kiếm tài liệu, được xác định là yêu cầu trọng tâm của đề tài — và bổ sung 4 cải tiến kỹ thuật dưới đây, đều được kiểm thử bằng số liệu thật trên hệ thống đang chạy (không chỉ dừng ở thiết kế).
+
+### ***2.6.1. Hybrid Retrieval bằng Reciprocal Rank Fusion (RRF)***
+
+Ở phiên bản đầu, cả tìm kiếm tài liệu và truy xuất ngữ cảnh cho Chatbot (RAG) đều theo cơ chế *waterfall*: thử tìm kiếm vector (ngữ nghĩa) trước, nếu có embedding thì dùng luôn kết quả đó; chỉ khi không có embedding (lỗi/hết quota API AI) mới chuyển sang tìm kiếm từ khóa. Cơ chế này có 2 hạn chế: (1) chỉ dùng được 1 trong 2 nguồn tín hiệu mỗi lần, bỏ lỡ trường hợp 2 nguồn bổ trợ cho nhau; (2) nhánh từ khóa dự phòng chỉ so khớp trên tiêu đề/mô tả, không tìm được trong nội dung tài liệu — nếu AI lỗi, hệ thống gần như "mù" với nội dung.
+
+Phiên bản hiện tại thay waterfall bằng **Reciprocal Rank Fusion (RRF)** — kỹ thuật kết hợp nhiều danh sách kết quả đã xếp hạng, được dùng trong các công cụ tìm kiếm hybrid thực tế (Elasticsearch, OpenSearch). Hệ thống chạy đồng thời (Promise.all) tìm kiếm vector (cosine similarity qua pgvector) và tìm kiếm từ khóa có ranking thật (ts\_rank, tìm trên cả tiêu đề **và** nội dung tài liệu), sau đó hợp nhất 2 danh sách bằng công thức:
+
+score(d) = Σ 1 / (k + rank<sub>i</sub>(d)), với k = 60
+
+trong đó rank<sub>i</sub>(d) là thứ hạng của tài liệu d trong danh sách thứ i (vector hoặc từ khóa); tài liệu xuất hiện ở cả 2 danh sách được cộng điểm từ cả hai, tài liệu chỉ ở 1 danh sách vẫn được giữ lại. Cơ chế này áp dụng đồng thời cho tìm kiếm tài liệu (`searchDocuments`) và truy xuất ngữ cảnh Chatbot (`retrieveChunks`).
+
+**Đánh giá định lượng:** nhóm xây dựng script đánh giá tự động, dùng tiêu đề của từng tài liệu đã xử lý làm câu truy vấn thử (proxy đánh giá yếu — weak supervision — không thay thế hoàn toàn cho việc gán nhãn tay, nhưng đủ để so sánh tương đối có cơ sở giữa 2 phương pháp), đo Precision@5, Recall@5 và MRR (Mean Reciprocal Rank) trên cùng một bộ dữ liệu, so sánh cơ chế waterfall cũ và RRF mới:
+
+| Phương pháp | Precision@5 | Recall@5 | MRR |
+| :---- | :---- | :---- | :---- |
+| Waterfall (cũ) | 0.1667 | 0.8333 | 0.7778 |
+| **RRF (mới)** | **0.2000** | **1.0000** | **1.0000** |
+
+**Bảng 2.2: So sánh định lượng Waterfall và RRF (N=6 tài liệu có chunk, K=5)**
+
+Kết quả cho thấy RRF tìm đúng tài liệu mong muốn trong mọi trường hợp thử nghiệm (Recall@5 và MRR đạt 1.0), trong khi waterfall bỏ lỡ khoảng 17% trường hợp.
+
+### ***2.6.2. Tìm kiếm toàn văn có index và hỗ trợ tiếng Việt không dấu***
+
+Tìm kiếm từ khóa ở phiên bản đầu dùng ILIKE thuần và tính to\_tsvector "ngay lúc truy vấn" (on-the-fly), không có index hỗ trợ — với corpus lớn, mỗi lượt tìm kiếm phải quét và tính lại toàn bộ dữ liệu văn bản, không tận dụng được index của PostgreSQL. Phiên bản hiện tại bổ sung:
+
+**\- Cấu hình text-search riêng `vi_unaccent`** (kế thừa cấu hình `simple` có sẵn của PostgreSQL, gắn thêm bộ lọc `unaccent`) — cho phép câu truy vấn không dấu (ví dụ "giai phap") vẫn so khớp được với nội dung có dấu ("giải pháp"), giải quyết đúng thói quen gõ tìm kiếm phổ biến của người dùng Việt Nam.
+
+**\- GIN index** trên cả tiêu đề/mô tả tài liệu (`idx_documents_fulltext`) và nội dung từng đoạn văn bản (`idx_doc_chunks_fulltext`) — xác nhận bằng lệnh EXPLAIN ANALYZE cho thấy truy vấn sử dụng Bitmap Index Scan trên các index này thay vì Sequential Scan toàn bảng.
+
+### ***2.6.3. Cân bằng tải, bộ nhớ đệm và kiểm thử tải thực tế***
+
+Để kiểm chứng khả năng mở rộng ngang (không chỉ dừng ở cấu hình lý thuyết), nhóm dùng công cụ `autocannon` đo throughput thực tế khi chạy 1 instance API Server so với 3 instance phía sau Nginx:
+
+| Endpoint | 1 instance | 3 instance | Cải thiện |
+| :---- | :---- | :---- | :---- |
+| /healthz (không chạm CSDL) | 2.259 req/s | 4.894 req/s | **\~2,17×** |
+| Tìm kiếm tài liệu (bỏ qua cache, buộc truy vấn CSDL) | 102,6 req/s | 113,4 req/s | \~1,1× |
+
+**Bảng 2.3: Kết quả kiểm thử tải (autocannon, 20 connection, 10 giây)**
+
+Kết quả cho thấy tầng ứng dụng (API Server) scale ngang hiệu quả gần đúng tỉ lệ số instance khi tác vụ không phụ thuộc CSDL; nhưng khi tác vụ phải truy vấn PostgreSQL — vẫn là **một instance duy nhất** — mức cải thiện rất nhỏ vì PostgreSQL trở thành nút nghẽn chung, bất kể có bao nhiêu instance API. Đây cũng chính là lý do bộ nhớ đệm Redis (TTL 30 giây cho kết quả tìm kiếm) có giá trị thực tế: với truy vấn lặp lại (cache hit), tải không còn chạm CSDL nữa, nên Load Balancer và Cache bổ trợ cho nhau — cái giải quyết tải tầng ứng dụng, cái giảm tải tầng dữ liệu. Nhóm xác định rõ đây là giới hạn đã biết của kiến trúc hiện tại (PostgreSQL/Redis/RabbitMQ/MinIO đều đang single-instance) và không đặt mục tiêu giải quyết triệt để trong phạm vi đồ án.
+
+### ***2.6.4. Giám sát hệ thống bằng Prometheus và Grafana***
+
+Để quan sát các cải tiến trên đang hoạt động đúng trong thực tế (không chỉ tin vào log thủ công), nhóm bổ sung tầng giám sát số liệu (metrics): API Server và Worker tự thu thập và expose số liệu vận hành (số request theo route, thời gian xử lý, tỉ lệ cache hit/miss, số tài liệu Worker xử lý thành công/thất bại) qua thư viện `prom-client`; PostgreSQL/Redis/RabbitMQ được giám sát qua exporter chính thức có sẵn. Prometheus thu thập định kỳ 10 giây/lần, Grafana hiển thị qua dashboard trực quan gồm 4 biểu đồ chính. Nhóm chủ động không triển khai centralized logging hay distributed tracing ở giai đoạn này — với quy mô dưới 10 service, `docker compose logs` vẫn đủ dùng, và việc lan truyền trace context qua hàng đợi RabbitMQ là bài toán khó, không tương xứng với lợi ích ở quy mô hệ thống hiện tại.
+
+## **2.7. Kết luận Chương 2**
 
 Chương 2 đã trình bày chi tiết phương pháp luận và cơ sở kỹ thuật cốt lõi để xây dựng hệ thống P-Documents. Qua việc phân tích, nhóm đã xác lập được:
 
@@ -219,6 +276,8 @@ Chương 2 đã trình bày chi tiết phương pháp luận và cơ sở kỹ t
 **\- Kiến trúc phần mềm:** Áp dụng đồng thời ba mẫu kiến trúc: Layered Architecture trong API Server (Routing/Controller/Service/Data Access), Event-Driven Architecture trong Worker (pipeline 4 giai đoạn bất đồng bộ), và Component-Based Architecture trong Frontend (services/hooks tách API-calling và state khỏi UI). Presigned URL Pattern đảm bảo API Server không bao giờ xử lý binary data.
 
 **\- Giải pháp công nghệ:** Thiết lập một hệ sinh thái đồng nhất dựa trên JavaScript/TypeScript (Next.js, Node.js, Express) cho toàn bộ ba service chính. Việc kết hợp PostgreSQL+pgvector (RDBMS \+ vector search), Redis (in-memory cache), MinIO (S3-compatible storage), RabbitMQ (reliable message delivery) và Socket.IO (real-time events) là lời giải tối ưu cho bài toán nền tảng học tập tích hợp đa tính năng.
+
+**\- Giải pháp nâng cao (mục 2.6):** Thay cơ chế tìm kiếm waterfall bằng Hybrid Retrieval theo Reciprocal Rank Fusion, đo định lượng được mức cải thiện thật (Recall@5/MRR từ \~0,78-0,83 lên 1,0); bổ sung Full-Text Search có GIN index và hỗ trợ tiếng Việt không dấu; chứng minh khả năng mở rộng ngang bằng kiểm thử tải thực tế (\~2,17× throughput với 3 instance API); bổ sung Retry/Dead Letter Queue cho Worker để không còn lỗi xử lý tài liệu bị nuốt âm thầm; và triển khai Prometheus/Grafana để giám sát hệ thống theo thời gian thực.
 
 Những nghiên cứu và lựa chọn trong chương này đóng vai trò là kim chỉ nam và nền tảng vững chắc để nhóm tiến hành các bước phân tích, thiết kế chi tiết và hiện thực hóa sản phẩm trong các chương tiếp theo.
 

@@ -318,6 +318,8 @@ classDiagram
   DocumentActionController --> StorageService
 ```
 
+*Lưu ý:* `findWithFilters()` của lớp **Document** ở đây thể hiện hành vi tra cứu tài liệu ở mức phân tích (ECB) — bên dưới, hàm này được hiện thực bằng cơ chế Hybrid Retrieval kết hợp tìm kiếm vector và từ khóa qua Reciprocal Rank Fusion (RRF), chi tiết thuật toán và số liệu đánh giá tại Chương 2, mục 2.6.1.
+
 Với biểu đồ lớp trên, kịch bản chi tiết cho chức năng xem/tải xuống tài liệu diễn ra như sau:
 
 * NSD nhập từ khóa, chọn danh mục và click "Tìm kiếm" trên lớp DocumentView.  
@@ -396,6 +398,8 @@ classDiagram
   ChatController --> AILlmService
   ChatController --> DocChunk
 ```
+
+*Lưu ý:* `searchSimilar()` của lớp **DocChunk** thể hiện hành vi truy xuất đoạn văn bản liên quan ở mức phân tích (ECB) — bên dưới, hàm này cũng dùng cơ chế Hybrid Retrieval/RRF như trên (chạy đồng thời tìm kiếm vector và từ khóa rồi hợp nhất kết quả), thay cho cơ chế "thử vector trước, không có thì chuyển sang từ khóa" ở phiên bản đầu — chi tiết tại Chương 2, mục 2.6.1.
 
 Với biểu đồ lớp trên, kịch bản chi tiết cho chức năng hỏi đáp AI diễn ra như sau:
 
@@ -895,14 +899,17 @@ sequenceDiagram
 Để đảm bảo khả năng hoạt động độc lập và chịu tải cao, hệ thống P-Documents được thiết kế và triển khai trên kiến trúc phân tán dựa vào Docker Containers.  
 ![][image2]
 
+> **Lưu ý khi cập nhật Hình (Deployment Diagram):** sơ đồ hiện tại (ảnh nhúng, không thể sửa trực tiếp bằng văn bản) chưa thể hiện các container giám sát bổ sung ở giai đoạn sau: `prometheus`, `grafana`, `postgres_exporter`, `redis_exporter`, và việc `api`/`worker` có thể chạy nhiều instance (scale ngang) phía sau Nginx. Cần vẽ lại để thêm các container này và thể hiện rõ Nginx phân tải tới nhiều instance API.
+
 - **Client (Frontend)**: Ứng dụng Next.js cung cấp giao diện người dùng.  
-- **API Server (Backend)**: Ứng dụng Node.js/Express cung cấp REST API và kết nối Socket.IO.  
-- **Worker (Xử lý ngầm)**: Dịch vụ Node.js chạy ngầm, chuyên trách xử lý các file tài liệu tải lên.  
-- **PostgreSQL**: Cơ sở dữ liệu chính, được cài đặt kèm extension pgvector phục vụ tìm kiếm vector.  
-- **Redis**: In-memory cache dùng cho JWT Blacklist và tối ưu hóa truy vấn.  
-- **RabbitMQ**: Message broker điều phối hàng đợi tác vụ giữa API Server và Worker.  
+- **API Server (Backend)**: Ứng dụng Node.js/Express cung cấp REST API và kết nối Socket.IO; có thể chạy nhiều instance song song phía sau Nginx để chịu tải tốt hơn (đã kiểm thử thật, xem Chương 2 mục 2.6.3).  
+- **Worker (Xử lý ngầm)**: Dịch vụ Node.js chạy ngầm, chuyên trách xử lý các file tài liệu tải lên; có cơ chế thử lại (retry) với độ trễ tăng dần và hàng đợi dự phòng (Dead Letter Queue) khi xử lý thất bại liên tục, cũng có thể chạy nhiều instance cùng lắng nghe một hàng đợi.  
+- **PostgreSQL**: Cơ sở dữ liệu chính, được cài đặt kèm extension pgvector phục vụ tìm kiếm vector và GIN index phục vụ tìm kiếm từ khóa có hỗ trợ tiếng Việt không dấu.  
+- **Redis**: In-memory store dùng cho JWT Blacklist và cache kết quả tìm kiếm tài liệu (TTL ngắn).  
+- **RabbitMQ**: Message broker điều phối hàng đợi tác vụ giữa API Server và Worker, gồm cả hàng đợi chính và hàng đợi dự phòng (DLQ).  
 - **MinIO**: Hệ thống lưu trữ đối tượng (Object Storage) tương thích S3 để chứa các file PDF.  
-- **Nginx**: Cổng giao tiếp API (API Gateway) đóng vai trò định tuyến request từ ngoài Internet vào các dịch vụ bên trong mạng nội bộ.
+- **Nginx**: Cổng giao tiếp API (API Gateway) đóng vai trò định tuyến request từ ngoài Internet vào các dịch vụ bên trong mạng nội bộ, đồng thời đóng vai trò Load Balancer khi API Server chạy nhiều instance.  
+- **Prometheus \+ Grafana**: Thu thập và hiển thị số liệu vận hành (request rate, cache hit ratio, số tài liệu Worker xử lý thành công/thất bại, số kết nối CSDL) theo thời gian thực.
 
 Tất cả các thành phần giao tiếp với nhau trong một mạng ảo nội bộ an toàn, giúp tăng cường bảo mật và tách biệt môi trường triển khai.
 
@@ -980,7 +987,8 @@ Bảng chính lưu metadata của tài liệu PDF. File PDF gốc được lưu 
 | size | bigint | NOT NULL | Kích thước file tính theo byte |
 | sha256 | text | NULL, UNIQUE INDEX (partial) | Mã băm SHA-256 nội dung file — phục vụ chống trùng lặp |
 | object\_key | text | NOT NULL, UNIQUE | Khóa object trong MinIO bucket (format: {userId}/{uuid}-{filename}) |
-| status | text | NOT NULL, DEFAULT 'uploaded' | Trạng thái xử lý của tài liệu |
+| status | text | NOT NULL, DEFAULT 'uploaded' | Trạng thái xử lý của tài liệu (uploaded/approved/rejected) |
+| chunk\_status | text | NOT NULL, DEFAULT 'pending', CHECK IN (pending/completed/failed) | Trạng thái pipeline chunking/embedding của Worker — tách riêng khỏi `status` để theo dõi retry/DLQ khi trích xuất nội dung thất bại |
 | stars | int | NOT NULL, DEFAULT 0 | Tổng số lượt yêu thích (denormalized counter) |
 | downloads | int | NOT NULL, DEFAULT 0 | Tổng số lượt tải xuống (denormalized counter) |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm upload |

@@ -29,82 +29,26 @@ export async function insertDocument(data: {
   return result.rows[0];
 }
 
-export async function searchDocumentsVector(opts: {
-  userId: string;
+export async function searchDocumentsVectorRanked(opts: {
   vectorStr: string;
   categoryId: string | null;
-  limit: number;
-  offset: number;
-}) {
-  // Lấy top 100 chunks gần nhất, rồi group theo document để lấy max score
-  const params: unknown[] = [opts.vectorStr, 100];
-  let categoryParamIdx: number | null = null;
-  if (opts.categoryId) {
-    params.push(opts.categoryId);
-    categoryParamIdx = params.length;
-  }
-  params.push(opts.userId);
-  const userParamIdx = params.length;
-  params.push(opts.limit);
-  const limitParamIdx = params.length;
-  params.push(opts.offset);
-  const offsetParamIdx = params.length;
-
-  const categoryFilter = categoryParamIdx ? `AND d.category_id = $${categoryParamIdx}` : "";
+  candidateLimit: number;
+}): Promise<{ document_id: string }[]> {
+  const params: unknown[] = [opts.vectorStr, opts.candidateLimit];
+  const categoryFilter = opts.categoryId ? `AND d.category_id = $3` : "";
+  if (opts.categoryId) params.push(opts.categoryId);
 
   const result = await pool.query(
     `
-    WITH vector_matches AS (
-      SELECT
-        dc.document_id,
-        -- Cosine similarity: 1 - cosine_distance (pgvector dùng <=> cho cosine distance)
-        MAX(1 - (dc.embedding <=> $1::vector)) AS vector_score
-      FROM doc_chunks dc
-      INNER JOIN documents d ON d.id = dc.document_id
-      WHERE dc.embedding IS NOT NULL
-        AND d.status = 'approved'
-        ${categoryFilter}
-      GROUP BY dc.document_id
-      ORDER BY vector_score DESC
-      LIMIT $2
-    ),
-    scored AS (
-      SELECT
-        d.id,
-        d.title,
-        d.description,
-        d.mime,
-        d.size,
-        d.status,
-        d.created_at,
-        d.stars,
-        d.downloads,
-        d.category_id,
-        c.slug  AS category_slug,
-        c.name  AS category_name,
-        u.display_name AS uploader_name,
-        u.email        AS uploader_email,
-        vm.vector_score,
-        -- Normalize stars và downloads (log scale để tránh document có 10k download áp đảo)
-        -- rồi tính Final Score
-        (
-          vm.vector_score * 0.5
-          + LEAST(LN(d.stars + 1) / 10.0, 1.0) * 0.3
-          + LEAST(LN(d.downloads + 1) / 10.0, 1.0) * 0.2
-        ) AS final_score,
-        -- Kiểm tra user có star tài liệu này chưa
-        EXISTS(
-          SELECT 1 FROM document_stars ds
-          WHERE ds.document_id = d.id AND ds.user_id = $${userParamIdx}
-        ) AS is_starred
-      FROM vector_matches vm
-      INNER JOIN documents d ON d.id = vm.document_id
-      LEFT JOIN users u ON u.id = d.owner_id
-      LEFT JOIN categories c ON c.id = d.category_id
-    )
-    SELECT * FROM scored
-    ORDER BY final_score DESC
-    LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}
+    SELECT dc.document_id
+    FROM doc_chunks dc
+    INNER JOIN documents d ON d.id = dc.document_id
+    WHERE dc.embedding IS NOT NULL
+      AND d.status = 'approved'
+      ${categoryFilter}
+    GROUP BY dc.document_id
+    ORDER BY MAX(1 - (dc.embedding <=> $1::vector)) DESC
+    LIMIT $2
     `,
     params,
   );
@@ -112,21 +56,63 @@ export async function searchDocumentsVector(opts: {
   return result.rows;
 }
 
-export async function searchDocumentsKeyword(opts: {
+/**
+ * Keyword ranking trên title+description VÀ nội dung tài liệu (doc_chunks),
+ * dùng config 'vi_unaccent' (bỏ dấu tiếng Việt) + GIN index trên cả 2 nguồn
+ * (idx_documents_fulltext, idx_doc_chunks_fulltext — xem migration 003) thay
+ * vì string_agg toàn bộ chunk của mọi document mỗi lần search (rất chậm khi
+ * corpus lớn). Trước đây chỉ ILIKE title/description, "mù" với nội dung khi
+ * không có AI embedding — UNION 2 nguồn dưới đây vá luôn lỗ hổng đó.
+ */
+export async function searchDocumentsKeywordRanked(opts: {
+  q: string;
+  categoryId: string | null;
+  candidateLimit: number;
+}): Promise<{ document_id: string }[]> {
+  const params: unknown[] = [opts.q, opts.candidateLimit];
+  const categoryFilter = opts.categoryId ? `AND d.category_id = $3` : "";
+  if (opts.categoryId) params.push(opts.categoryId);
+
+  const result = await pool.query(
+    `
+    WITH title_match AS (
+      SELECT d.id AS document_id,
+             ts_rank(to_tsvector('vi_unaccent', d.title || ' ' || coalesce(d.description,'')), plainto_tsquery('vi_unaccent', $1)) AS score
+      FROM documents d
+      WHERE d.status = 'approved'
+        ${categoryFilter}
+        AND to_tsvector('vi_unaccent', d.title || ' ' || coalesce(d.description,'')) @@ plainto_tsquery('vi_unaccent', $1)
+    ),
+    content_match AS (
+      SELECT dc.document_id,
+             MAX(ts_rank(to_tsvector('vi_unaccent', dc.content), plainto_tsquery('vi_unaccent', $1))) AS score
+      FROM doc_chunks dc
+      INNER JOIN documents d ON d.id = dc.document_id
+      WHERE d.status = 'approved'
+        ${categoryFilter}
+        AND to_tsvector('vi_unaccent', dc.content) @@ plainto_tsquery('vi_unaccent', $1)
+      GROUP BY dc.document_id
+    )
+    SELECT document_id, MAX(score) AS kw_score
+    FROM (SELECT * FROM title_match UNION ALL SELECT * FROM content_match) combined
+    GROUP BY document_id
+    ORDER BY kw_score DESC
+    LIMIT $2
+    `,
+    params,
+  );
+
+  return result.rows;
+}
+
+export async function listDocumentsDefault(opts: {
   userId: string;
-  q?: string;
   categoryId: string | null;
   limit: number;
   offset: number;
 }) {
-  // Cho phép hiện list "chờ xử lý" nếu là tài liệu do chính user upload
   const params: unknown[] = [opts.userId];
   let conditions = `WHERE (d.status = 'approved' OR d.owner_id = $1)`;
-
-  if (opts.q && opts.q.trim()) {
-    params.push(`%${opts.q.trim()}%`);
-    conditions += ` AND (d.title ILIKE $${params.length} OR d.description ILIKE $${params.length})`;
-  }
 
   if (opts.categoryId) {
     params.push(opts.categoryId);
@@ -160,7 +146,33 @@ export async function searchDocumentsKeyword(opts: {
     params,
   );
 
-  console.log(`[document.model] Keyword search returned ${result.rows.length} docs. Conditions:`, conditions);
+  return result.rows;
+}
+
+export async function hydrateDocumentsByIds(opts: {
+  ids: string[];
+  userId: string;
+}) {
+  if (opts.ids.length === 0) return [];
+
+  const result = await pool.query(
+    `
+    SELECT
+      d.id, d.title, d.description, d.mime, d.size, d.status, d.created_at,
+      d.stars, d.downloads, d.category_id,
+      c.slug AS category_slug, c.name AS category_name,
+      u.display_name AS uploader_name, u.email AS uploader_email,
+      EXISTS(
+        SELECT 1 FROM document_stars ds
+        WHERE ds.document_id = d.id AND ds.user_id = $2
+      ) AS is_starred
+    FROM documents d
+    LEFT JOIN users u ON u.id = d.owner_id
+    LEFT JOIN categories c ON c.id = d.category_id
+    WHERE d.id = ANY($1::uuid[])
+    `,
+    [opts.ids, opts.userId],
+  );
 
   return result.rows;
 }

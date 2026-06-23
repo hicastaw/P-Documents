@@ -15,12 +15,14 @@ import * as documentModel from "../models/document.model";
 import { callFPTCloud, FptError, FptMessage } from "./fpt.service";
 import { buildSystemPrompt, buildUserMessage } from "../utils/prompt.util";
 import { loadEnv } from "../config/env";
+import { fuseRRF } from "../utils/rrf.util";
+import type { ChatChunk } from "../models/chat.model";
 
 const env = loadEnv();
 
-const MAX_VECTOR_CHUNKS = 8;  // chunks returned by vector similarity search
-const MAX_KEYWORD_CHUNKS = 8; // chunks returned by keyword search (ILIKE fallback)
-const MAX_FALLBACK_CHUNKS = 5; // chunks returned when no keyword match
+const MAX_VECTOR_CHUNKS = 8;   // final chunk count returned to the prompt, after RRF fusion
+const CANDIDATE_CHUNKS = 15;   // candidates fetched per source before fusion (more than final count)
+const MAX_FALLBACK_CHUNKS = 5; // chunks returned when neither vector nor keyword matched anything
 
 /**
  * Gọi FPT AI Embedding để lấy vector của câu hỏi.
@@ -138,39 +140,40 @@ export async function handleChat(opts: {
 }
 
 /**
- * Hybrid retrieval từ doc_chunks.
+ * Hybrid retrieval từ doc_chunks bằng Reciprocal Rank Fusion (RRF).
  *
- * Ưu tiên:
- *   1. Vector Similarity Search (cosine) — nếu câu hỏi có embedding
- *   2. ILIKE keyword search             — nếu không có embedding
- *   3. Lấy N chunk đầu của tài liệu    — nếu cả 2 không có kết quả
+ * Chạy đồng thời Vector Similarity Search (cosine) + Keyword search (ts_rank),
+ * kết hợp 2 ranked-list bằng RRF thay vì chỉ chọn 1 nguồn (waterfall cũ).
+ * Chỉ fallback "lấy N chunk đầu của tài liệu" khi cả 2 nguồn đều rỗng.
  */
-async function retrieveChunks(question: string, documentId?: string) {
-  // ── Bước 1: Thử lấy embedding của câu hỏi ────────────────────────────────
-  const questionVector = await getQuestionEmbedding(question);
-
-  // ── Bước 2: Vector Similarity Search (nếu có embedding) ──────────────────
-  if (questionVector) {
-    const vectorStr = `[${questionVector.join(",")}]`;
-    const rows = await chatModel.findChunksByVector(vectorStr, documentId, MAX_VECTOR_CHUNKS);
-    if (rows.length > 0) return rows;
-  }
-
-  // ── Bước 3: Fallback — ILIKE keyword search ───────────────────────────────
+export async function retrieveChunks(question: string, documentId?: string) {
+  const questionVector = question.trim() ? await getQuestionEmbedding(question) : null;
   const keywords = question
     .split(/\s+/)
     .map((s) => s.trim())
     .filter(Boolean)
     .slice(0, 5);
 
-  let chunks = keywords.length > 0
-    ? await chatModel.findChunksByKeyword(keywords[0], documentId, MAX_KEYWORD_CHUNKS)
-    : [];
+  const [vectorRows, keywordRows] = await Promise.all([
+    questionVector
+      ? chatModel.findChunksByVector(`[${questionVector.join(",")}]`, documentId, CANDIDATE_CHUNKS)
+      : Promise.resolve([] as ChatChunk[]),
+    keywords.length > 0
+      ? chatModel.findChunksByKeywordRanked(keywords, documentId, CANDIDATE_CHUNKS)
+      : Promise.resolve([] as ChatChunk[]),
+  ]);
 
-  // Fallback: first N chunks of the document
-  if (chunks.length === 0) {
-    chunks = await chatModel.findFirstChunks(documentId, MAX_FALLBACK_CHUNKS);
+  if (vectorRows.length === 0 && keywordRows.length === 0) {
+    return chatModel.findFirstChunks(documentId, MAX_FALLBACK_CHUNKS);
   }
 
-  return chunks;
+  const chunkKey = (c: ChatChunk) => `${c.document_id}::${c.chunk_index}`;
+  const byKey = new Map<string, ChatChunk>();
+  for (const c of [...vectorRows, ...keywordRows]) byKey.set(chunkKey(c), c);
+
+  const vectorRanked = vectorRows.map((c, i) => ({ id: chunkKey(c), rank: i + 1 }));
+  const keywordRanked = keywordRows.map((c, i) => ({ id: chunkKey(c), rank: i + 1 }));
+
+  const fused = fuseRRF([vectorRanked, keywordRanked]).slice(0, MAX_VECTOR_CHUNKS);
+  return fused.map(({ id }) => byKey.get(id)!).filter(Boolean);
 }

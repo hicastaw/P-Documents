@@ -1,0 +1,54 @@
+{
+  "title": "P-Documents Overview",
+  "uid": "pdocs-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP request rate (by route)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) by (route)",
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Search cache hit ratio",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(search_cache_total{result=\"hit\"}) / sum(search_cache_total)"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "title": "Worker: documents processed vs failed",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "documents_processed_total", "legendFormat": "processed" },
+        { "expr": "sum(documents_failed_total) by (stage)", "legendFormat": "failed ({{stage}})" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Postgres active connections",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "sum(pg_stat_activity_count)" }
+      ]
+    }
+  ]
+}

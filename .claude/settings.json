@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:9091/api/v1/targets)",
+      "Bash(curl -sv http://localhost:9091/api/v1/targets)",
+      "Bash(curl -s -u admin:admin http://localhost:3002/api/health)",
+      "Bash(curl -s -u admin:admin http://localhost:3002/api/datasources)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);j.forEach\\(ds=>console.log\\(ds.name, ds.type, ds.url\\)\\)}\\)\")",
+      "Bash(curl -s -u admin:admin http://localhost:3002/api/search)",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);j.forEach\\(db=>console.log\\(db.title, db.uid\\)\\)}\\)\")",
+      "Bash(curl -s -G \"http://localhost:9091/api/v1/query\" --data-urlencode 'query=sum\\(rate\\(http_requests_total[1m]\\)\\) by \\(route\\)')",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>console.log\\(d\\)\\)\")",
+      "Bash(curl -s -G \"http://localhost:9091/api/v1/query\" --data-urlencode 'query=sum\\(search_cache_total{result=\"hit\"}\\) / sum\\(search_cache_total\\)')",
+      "Bash(curl -s -G \"http://localhost:9091/api/v1/query\" --data-urlencode 'query=sum\\(pg_stat_activity_count\\)')",
+      "Bash(curl -s -G \"http://localhost:9091/api/v1/query\" --data-urlencode 'query=pg_stat_activity_count')",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\('series:',j.data.result.length\\); j.data.result.forEach\\(r=>console.log\\(JSON.stringify\\(r.metric\\), r.value[1]\\)\\)}\\)\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{JSON.parse\\(d\\).data.result.forEach\\(r=>console.log\\(r.metric.route, r.value[1]\\)\\)}\\)\")",
+      "Bash(curl -s -G \"http://localhost:9091/api/v1/query\" --data-urlencode 'query=sum\\(documents_failed_total\\) by \\(stage\\)')",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{JSON.parse\\(d\\).data.result.forEach\\(r=>console.log\\(r.metric.stage, r.value[1]\\)\\)}\\)\")",
+      "Bash(awk '{print length, NR}' Chuong2_ok.md)"
+    ]
+  }
+}

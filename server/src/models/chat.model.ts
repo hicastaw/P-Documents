@@ -35,15 +35,25 @@ export async function findChunksByVector(vectorStr: string, documentId: string |
   return r.rows;
 }
 
-export async function findChunksByKeyword(keyword: string, documentId: string | undefined, limit: number): Promise<ChatChunk[]> {
-  const like = `%${keyword}%`;
+/**
+ * Keyword ranking thật (ts_rank) trên toàn bộ keyword của câu hỏi, thay vì
+ * chỉ ILIKE từ đầu tiên không có ranking như trước.
+ */
+export async function findChunksByKeywordRanked(keywords: string[], documentId: string | undefined, limit: number): Promise<ChatChunk[]> {
+  const tsQuery = keywords
+    .map((k) => k.replace(/[^\p{L}\p{N}\s]/gu, "").trim())
+    .filter(Boolean)
+    .join(" | ");
+  if (!tsQuery) return [];
+
   if (documentId) {
     const r = await pool.query(
       `SELECT chunk_index, content, document_id
        FROM doc_chunks
-       WHERE document_id=$1 AND content ILIKE $2
-       ORDER BY chunk_index ASC LIMIT $3`,
-      [documentId, like, limit],
+       WHERE document_id=$1 AND to_tsvector('vi_unaccent', content) @@ to_tsquery('vi_unaccent', $2)
+       ORDER BY ts_rank(to_tsvector('vi_unaccent', content), to_tsquery('vi_unaccent', $2)) DESC
+       LIMIT $3`,
+      [documentId, tsQuery, limit],
     );
     return r.rows;
   }
@@ -52,10 +62,11 @@ export async function findChunksByKeyword(keyword: string, documentId: string | 
     `SELECT dc.chunk_index, dc.content, dc.document_id
      FROM doc_chunks dc
      INNER JOIN documents d ON d.id = dc.document_id
-     WHERE dc.content ILIKE $1
+     WHERE to_tsvector('simple', dc.content) @@ to_tsquery('vi_unaccent', $1)
        AND d.status = 'approved'
-     ORDER BY dc.chunk_index ASC LIMIT $2`,
-    [like, limit],
+     ORDER BY ts_rank(to_tsvector('simple', dc.content), to_tsquery('vi_unaccent', $1)) DESC
+     LIMIT $2`,
+    [tsQuery, limit],
   );
   return r.rows;
 }

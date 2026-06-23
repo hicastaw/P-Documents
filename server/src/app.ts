@@ -11,10 +11,31 @@ import { forumRouter } from "./routes/forum.routes";
 import { notificationsRouter } from "./routes/notifications.routes";
 import { statsRouter } from "./routes/stats.routes";
 import { adminRouter } from "./routes/admin.routes";
+import { register, httpRequestsTotal, httpRequestDurationSeconds } from "./config/metrics";
 
 export function createApp() {
   const env = loadEnv();
   const app = express();
+
+  // Reveal which replica served the request — proof of load balancing across
+  // multiple `api` instances behind Nginx (see docker-compose --scale api=N).
+  app.use((_req, res, next) => {
+    res.setHeader("X-Instance-Id", process.env.HOSTNAME ?? "unknown");
+    next();
+  });
+
+  // Prometheus request metrics — recorded for every request, regardless of route.
+  app.use((req, res, next) => {
+    const start = process.hrtime.bigint();
+    res.on("finish", () => {
+      const route = req.route?.path ? `${req.baseUrl}${req.route.path}` : req.path;
+      const labels = { method: req.method, route, status_code: String(res.statusCode) };
+      httpRequestsTotal.inc(labels);
+      const seconds = Number(process.hrtime.bigint() - start) / 1e9;
+      httpRequestDurationSeconds.observe({ method: req.method, route }, seconds);
+    });
+    next();
+  });
 
   app.use(
     cors({
@@ -26,6 +47,11 @@ export function createApp() {
   app.use(cookieParser());
 
   app.get("/healthz", (_req: express.Request, res: express.Response) => res.json({ ok: true }));
+
+  app.get("/metrics", async (_req: express.Request, res: express.Response) => {
+    res.setHeader("Content-Type", register.contentType);
+    res.send(await register.metrics());
+  });
 
   app.use("/auth", authRouter);
   app.use("/documents", documentsRouter);

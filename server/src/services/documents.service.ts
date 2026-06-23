@@ -4,6 +4,11 @@ import { loadEnv } from "../config/env";
 import { publishDocumentUploaded } from "./queue.service";
 import { sanitizeFilename, toPublicMinioUrl } from "../utils/filename.util";
 import * as documentModel from "../models/document.model";
+import { redis } from "../config/redis";
+import { fuseRRF } from "../utils/rrf.util";
+import { searchCacheTotal } from "../config/metrics";
+
+const SEARCH_CACHE_TTL_SECONDS = 30;
 
 const env = loadEnv();
 
@@ -90,20 +95,78 @@ export async function searchDocuments(opts: {
   limit: number;
   page: number;
 }) {
+  const { userId, q, category, limit, page } = opts;
+  const cacheKey = `search:${userId}:${q ?? ""}:${category ?? ""}:${page}:${limit}`;
+
+  const cached = await redis.get(cacheKey).catch(() => null);
+  if (cached) {
+    searchCacheTotal.inc({ result: "hit" });
+    return { ...JSON.parse(cached), cache: "hit" as const };
+  }
+  searchCacheTotal.inc({ result: "miss" });
+
+  const result = await runSearchDocuments({ userId, q, category, limit, page });
+
+  await redis
+    .set(cacheKey, JSON.stringify(result), { EX: SEARCH_CACHE_TTL_SECONDS })
+    .catch((e) => console.warn("[Search] Cache write failed:", e));
+
+  return { ...result, cache: "miss" as const };
+}
+
+const CANDIDATE_LIMIT = 100;
+
+async function runSearchDocuments(opts: {
+  userId: string;
+  q?: string;
+  category?: string;
+  limit: number;
+  page: number;
+}) {
   const { userId, q, limit, page } = opts;
   const offset = (page - 1) * limit;
   const categoryId = opts.category ? await documentModel.findCategoryIdBySlug(opts.category) : null;
 
-  const queryVector = q ? await getQueryEmbedding(q) : null;
-
-  if (queryVector) {
-    const vectorStr = `[${queryVector.join(",")}]`;
-    const rows = await documentModel.searchDocumentsVector({ userId, vectorStr, categoryId, limit, offset });
-    return { documents: rows, search_mode: "vector_ai" as const, page, limit };
+  if (!q || !q.trim()) {
+    const rows = await documentModel.listDocumentsDefault({ userId, categoryId, limit, offset });
+    return { documents: rows, search_mode: "keyword_fallback" as const, page, limit };
   }
 
-  const rows = await documentModel.searchDocumentsKeyword({ userId, q, categoryId, limit, offset });
-  return { documents: rows, search_mode: "keyword_fallback" as const, page, limit };
+  const queryVector = await getQueryEmbedding(q);
+
+  const [vectorRows, keywordRows] = await Promise.all([
+    queryVector
+      ? documentModel.searchDocumentsVectorRanked({
+          vectorStr: `[${queryVector.join(",")}]`,
+          categoryId,
+          candidateLimit: CANDIDATE_LIMIT,
+        })
+      : Promise.resolve([]),
+    documentModel.searchDocumentsKeywordRanked({ q, categoryId, candidateLimit: CANDIDATE_LIMIT }),
+  ]);
+
+  const vectorRanked = vectorRows.map((r, i) => ({ id: r.document_id, rank: i + 1 }));
+  const keywordRanked = keywordRows.map((r, i) => ({ id: r.document_id, rank: i + 1 }));
+
+  let fusedIds: string[];
+  let search_mode: "rrf_hybrid" | "vector_only" | "keyword_only";
+  if (vectorRanked.length > 0 && keywordRanked.length > 0) {
+    fusedIds = fuseRRF([vectorRanked, keywordRanked]).map((r) => r.id);
+    search_mode = "rrf_hybrid";
+  } else if (vectorRanked.length > 0) {
+    fusedIds = vectorRanked.map((r) => r.id);
+    search_mode = "vector_only";
+  } else {
+    fusedIds = keywordRanked.map((r) => r.id);
+    search_mode = "keyword_only";
+  }
+
+  const pageIds = fusedIds.slice(offset, offset + limit);
+  const hydrated = await documentModel.hydrateDocumentsByIds({ ids: pageIds, userId });
+  const byId = new Map(hydrated.map((row) => [row.id, row]));
+  const documents = pageIds.map((id) => byId.get(id)).filter(Boolean);
+
+  return { documents, search_mode, page, limit };
 }
 
 // ─── Download (+ tăng counter) ───────────────────────────────────────────────
