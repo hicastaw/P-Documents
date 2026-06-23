@@ -40,8 +40,25 @@ export async function login(req: Request, res: Response, next: NextFunction) {
 }
 
 export async function logout(req: Request, res: Response) {
-  await service.logout(req.auth!.jti);
+  await service.logout(req.auth!.jti, req.body?.refreshToken);
   return res.json({ ok: true });
+}
+
+const RefreshBodySchema = z.object({
+  refreshToken: z.string().min(1),
+});
+
+export async function refresh(req: Request, res: Response, next: NextFunction) {
+  try {
+    const body = RefreshBodySchema.parse(req.body);
+    const result = await service.refresh(body.refreshToken);
+    return res.json(result);
+  } catch (err) {
+    if (err instanceof Error && typeof (err as any).statusCode === "number") {
+      return res.status((err as any).statusCode).json({ error: err.message });
+    }
+    next(err);
+  }
 }
 
 export async function getMe(req: Request, res: Response) {

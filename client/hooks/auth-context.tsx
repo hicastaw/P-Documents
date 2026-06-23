@@ -6,7 +6,7 @@ import {
   useCallback,
   ReactNode,
 } from "react";
-import { apiJson, apiJsonAuth } from "../services/api";
+import { apiJson, apiJsonAuth, getAccessToken, getRefreshToken, setTokens, clearTokens } from "../services/api";
 
 export type AuthUser = {
   id: string;
@@ -32,11 +32,9 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({ status: "loading" });
 
-  // On mount: check if token exists and fetch /auth/me
+  // On mount: check if token exists and fetch /auth/me (apiJsonAuth auto-refreshes on 401)
   useEffect(() => {
-    const token = typeof window !== "undefined"
-      ? localStorage.getItem("pdocs_access_token")
-      : null;
+    const token = getAccessToken();
 
     if (!token) {
       setAuthState({ status: "unauthenticated" });
@@ -46,18 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiJsonAuth<{ user: AuthUser }>("/auth/me")
       .then(({ user }) => setAuthState({ status: "authenticated", user }))
       .catch(() => {
-        localStorage.removeItem("pdocs_access_token");
+        clearTokens();
         setAuthState({ status: "unauthenticated" });
       });
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    const json = await apiJson<{ accessToken: string; user: AuthUser }>("/auth/login", {
+    const json = await apiJson<{ accessToken: string; refreshToken: string; user: AuthUser }>("/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
     });
-    localStorage.setItem("pdocs_access_token", json.accessToken);
+    setTokens(json.accessToken, json.refreshToken);
     setAuthState({ status: "authenticated", user: json.user });
   }, []);
 
@@ -80,11 +78,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await apiJsonAuth("/auth/logout", { method: "POST" });
+      await apiJsonAuth("/auth/logout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refreshToken: getRefreshToken() ?? undefined }),
+      });
     } catch {
       // ignore server error — still clear local state
     }
-    localStorage.removeItem("pdocs_access_token");
+    clearTokens();
     setAuthState({ status: "unauthenticated" });
   }, []);
 

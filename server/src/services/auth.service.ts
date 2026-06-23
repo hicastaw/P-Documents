@@ -25,6 +25,10 @@ export function verifyAccessToken(token: string): JwtClaims {
   return jwt.verify(token, env.JWT_ACCESS_SECRET) as JwtClaims;
 }
 
+export function verifyRefreshToken(token: string): JwtClaims {
+  return jwt.verify(token, env.JWT_REFRESH_SECRET) as JwtClaims;
+}
+
 export async function register(email: string, password: string, displayName: string) {
   const passwordHash = await bcrypt.hash(password, 10);
   try {
@@ -56,8 +60,47 @@ export async function login(email: string, password: string) {
   };
 }
 
-export async function logout(jti: string) {
+export async function logout(jti: string, refreshToken?: string) {
   await redis.set(`jwt:blacklist:${jti}`, "1", { EX: env.JWT_ACCESS_TTL_SECONDS });
+
+  if (refreshToken) {
+    try {
+      const claims = verifyRefreshToken(refreshToken);
+      await redis.set(`jwt:blacklist:${claims.jti}`, "1", { EX: env.JWT_REFRESH_TTL_SECONDS });
+    } catch {
+      // refresh token already invalid/expired — nothing to revoke
+    }
+  }
+}
+
+export async function refresh(refreshToken: string) {
+  let claims: JwtClaims;
+  try {
+    claims = verifyRefreshToken(refreshToken);
+  } catch {
+    throw Object.assign(new Error("invalid_refresh_token"), { statusCode: 401 });
+  }
+
+  const isBlacklisted = await redis.exists(`jwt:blacklist:${claims.jti}`);
+  if (isBlacklisted) {
+    throw Object.assign(new Error("refresh_token_revoked"), { statusCode: 401 });
+  }
+
+  const user = await userModel.findUserById(claims.sub);
+  if (!user) throw Object.assign(new Error("user_not_found"), { statusCode: 401 });
+
+  // Rotate: invalidate the old refresh token so it can't be replayed after this point
+  await redis.set(`jwt:blacklist:${claims.jti}`, "1", { EX: env.JWT_REFRESH_TTL_SECONDS });
+
+  const access = signAccessToken(user.id);
+  const newRefresh = signRefreshToken(user.id);
+
+  return {
+    accessToken: access.token,
+    refreshToken: newRefresh.token,
+    accessExpiresIn: env.JWT_ACCESS_TTL_SECONDS,
+    refreshExpiresIn: env.JWT_REFRESH_TTL_SECONDS,
+  };
 }
 
 export async function getMe(userId: string) {
