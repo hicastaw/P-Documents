@@ -72,10 +72,14 @@ async function processDocument(documentId: string) {
 
   const { sha256, buffer } = await hashObject(doc.object_key);
 
-  // Dedup: if sha256 already exists in another document, reject
+  // Dedup: if sha256 already exists in another document, reject.
+  // Nội dung đã có sẵn ở document khác nên xoá luôn object trên MinIO của
+  // bản trùng này để không giữ 2 bản giống nhau tốn dung lượng — row vẫn
+  // giữ lại (status='rejected') để owner biết tài liệu mình bị từ chối.
   const existing = await pool.query("SELECT id FROM documents WHERE sha256=$1 AND id<>$2", [sha256, documentId]);
   if (existing.rows[0]) {
     await pool.query("UPDATE documents SET status='rejected' WHERE id=$1", [documentId]);
+    await minio.removeObject(env.MINIO_BUCKET, doc.object_key);
     return;
   }
 
