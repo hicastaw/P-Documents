@@ -115,7 +115,7 @@ Quá trình xây dựng hệ thống P-Documents được triển khai theo mô 
 
 \- Hoàn thiện UI/UX cho module Diễn đàn, đảm bảo thông báo đồng bộ tức thì, mượt mà khi người dùng online.  
 \- Phát triển luồng chính của module Quiz: hiển thị bài thi, tự động chấm điểm ngay khi nộp bài và lưu lịch sử học tập.  
-\- Hoàn tất kết nối API Chatbot AI (tích hợp LLM Gemini/FPT Cloud / Vector Search) để Chatbot có khả năng đọc ngữ cảnh tài liệu PDF và phản hồi chính xác.  
+\- Hoàn tất kết nối API Chatbot AI (tích hợp LLM FPT Cloud AI / Vector Search) để Chatbot có khả năng đọc ngữ cảnh tài liệu PDF và phản hồi chính xác.  
 \- Xây dựng Admin Dashboard quản trị số liệu hệ thống (tài khoản, tài liệu, báo cáo vi phạm).  
 \- Tối ưu hóa thuật toán truy vấn, tích hợp kiểu tìm kiếm mới.
 
@@ -202,7 +202,7 @@ Module này đóng vai trò là trung tâm điều phối dữ liệu và phát 
 |  | TypeScript (strict mode) | Kiểm tra kiểu tĩnh, giảm lỗi runtime |
 |  | Zod | Validate dữ liệu đầu vào tại lớp API |
 | 3\. Database | PostgreSQL 16 \+ pgvector | RDBMS quan hệ, JSONB, UUID, CASCADE, vector search |
-|  | Redis 7 | JWT Blacklist O(1), Trust Score Counter atomic |
+|  | Redis 7 | JWT Blacklist O(1) \+ Cache tìm kiếm (TTL 30s) |
 | 4\. Storage | MinIO | S3-compatible Object Storage, Presigned URL |
 | 5\. Messaging | RabbitMQ 3 | AMQP broker, durable queue, prefetch(1) |
 | 6\. AI \& Tìm kiếm | FPT Cloud AI API | LLM inference \+ embedding cho RAG pipeline |

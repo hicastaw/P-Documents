@@ -220,13 +220,10 @@ export default function DocumentsPage() {
 
   if (!auth) return null;
 
-  const filtered = docs.filter(
-    (d) =>
-      (!filterCategory || d.category_slug === filterCategory) &&
-      (!q.trim() ||
-        d.title.toLowerCase().includes(q.toLowerCase()) ||
-        (d.uploader_name ?? "").toLowerCase().includes(q.toLowerCase()))
-  );
+  // Lọc theo q đã được server xử lý (RRF hybrid: vector + full-text, không phân biệt
+  // dấu tiếng Việt) trong load() — không lọc lại bằng .includes() ở đây, vì điều đó sẽ
+  // loại bỏ chính những kết quả mà tìm kiếm ngữ nghĩa/không dấu vừa tìm ra đúng.
+  const filtered = docs.filter((d) => !filterCategory || d.category_slug === filterCategory);
 
   return (
     <AppShell

@@ -147,7 +147,6 @@ services:
     env_file: ./.env
     environment:
       POSTGRES_HOST: postgres
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       MINIO_ENDPOINT: minio
       MINIO_PORT: 9000
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://guest:guest@rabbitmq:5672}
@@ -170,6 +169,7 @@ services:
     environment:
       NEXT_PUBLIC_API_BASE: /api
       PORT: 3001
+      WATCHPACK_POLLING: "true"
     depends_on:
       api:
         condition: service_started

@@ -29,6 +29,8 @@ export async function insertDocument(data: {
   return result.rows[0];
 }
 
+const VECTOR_SIMILARITY_MIN = 0.5;
+
 export async function searchDocumentsVectorRanked(opts: {
   vectorStr: string;
   categoryId: string | null;
@@ -47,6 +49,7 @@ export async function searchDocumentsVectorRanked(opts: {
       AND d.status = 'approved'
       ${categoryFilter}
     GROUP BY dc.document_id
+    HAVING MAX(1 - (dc.embedding <=> $1::vector)) > ${VECTOR_SIMILARITY_MIN}
     ORDER BY MAX(1 - (dc.embedding <=> $1::vector)) DESC
     LIMIT $2
     `,

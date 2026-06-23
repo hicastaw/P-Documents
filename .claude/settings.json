@@ -17,7 +17,15 @@
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{JSON.parse\\(d\\).data.result.forEach\\(r=>console.log\\(r.metric.route, r.value[1]\\)\\)}\\)\")",
       "Bash(curl -s -G \"http://localhost:9091/api/v1/query\" --data-urlencode 'query=sum\\(documents_failed_total\\) by \\(stage\\)')",
       "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{JSON.parse\\(d\\).data.result.forEach\\(r=>console.log\\(r.metric.stage, r.value[1]\\)\\)}\\)\")",
-      "Bash(awk '{print length, NR}' Chuong2_ok.md)"
+      "Bash(awk '{print length, NR}' Chuong2_ok.md)",
+      "Bash(awk '{print length, NR}' /tmp/ch1_diff.txt)",
+      "Bash(awk '{ print length, NR }' Chuong3_ok.md)",
+      "Bash(cd \"e:/Project/P-Documents\" && docker compose exec -T api rm -f src/test_search.ts && rm -f /tmp/test_search.ts /tmp/ch1_old.txt /tmp/ch1_new.txt /tmp/ch1_diff.txt /tmp/ch3_old_31.txt /tmp/ch3_new_31.txt)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}, time_total=%{time_total}s\\\\n\" --max-time 15 \"http://localhost:8888/api/healthz\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}, time_total=%{time_total}s\\\\n\" --max-time 25 \"http://localhost:8888/api/documents?q=team%202\" -H \"Authorization: Bearer dummy\")"
+    ],
+    "additionalDirectories": [
+      "\\tmp"
     ]
   }
 }

@@ -917,7 +917,7 @@ Tất cả các thành phần giao tiếp với nhau trong một mạng ảo n�
 
 # **![][image3]**
 
-## **3\. Danh sách bảng tổng quan**
+### ***3.2.1. Danh sách bảng tổng quan***
 
 Tổng cộng hệ thống có **11 bảng đang sử dụng** tổ chức theo 5 nhóm domain:
 
@@ -935,15 +935,15 @@ Tổng cộng hệ thống có **11 bảng đang sử dụng** tổ chức theo 
 | 10 |  | forum\_posts | Bình luận diễn đàn (hỗ trợ nested/reply) |
 | 11 | Tiện ích | notifications | Thông báo hệ thống (real-time qua Socket.IO) |
 
-## **4\. Thiết kế chi tiết các bảng**
+### ***3.2.2. Thiết kế chi tiết các bảng***
 
-### ***4.1. Nhóm Xác thực (Authentication)***
+#### ***3.2.2.1. Nhóm Xác thực (Authentication)***
 
-#### ***4.1.1. Bảng users — Tài khoản người dùng***
+##### ***3.2.2.1.1. Bảng users — Tài khoản người dùng***
 
 Bảng trung tâm lưu trữ thông tin tài khoản. Mọi thực thể khác trong hệ thống đều tham chiếu đến users thông qua foreign key.
 
-*Bảng 1: Cấu trúc bảng users*
+*Bảng 3.1: Cấu trúc bảng users*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -954,13 +954,13 @@ Bảng trung tâm lưu trữ thông tin tài khoản. Mọi thực thể khác t
 | role | text | NOT NULL, DEFAULT 'user', CHECK (role IN ('admin', 'user')) | Vai trò phân quyền: admin hoặc user |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm tạo tài khoản |
 
-### ***4.2. Nhóm Tài liệu (Document Management)***
+#### ***3.2.2.2. Nhóm Tài liệu (Document Management)***
 
-#### ***4.2.1. Bảng categories — Danh mục tài liệu***
+##### ***3.2.2.2.1. Bảng categories — Danh mục tài liệu***
 
 Phân loại tài liệu theo danh mục. Hỗ trợ cấu trúc phân cấp (cây) thông qua self-referencing FK parent\_id.
 
-*Bảng 2: Cấu trúc bảng categories*
+*Bảng 3.2: Cấu trúc bảng categories*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -970,11 +970,11 @@ Phân loại tài liệu theo danh mục. Hỗ trợ cấu trúc phân cấp (c�
 | parent\_id | uuid | NULL, FK → categories(id) | Danh mục cha (self-referencing, hỗ trợ phân cấp) |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm tạo |
 
-#### ***4.2.2. Bảng documents — Tài liệu***
+##### ***3.2.2.2.2. Bảng documents — Tài liệu***
 
 Bảng chính lưu metadata của tài liệu PDF. File PDF gốc được lưu trên MinIO Object Storage, chỉ lưu object\_key tham chiếu trong bảng này.
 
-*Bảng 3: Cấu trúc bảng documents*
+*Bảng 3.3: Cấu trúc bảng documents*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -993,11 +993,11 @@ Bảng chính lưu metadata của tài liệu PDF. File PDF gốc được lưu 
 | downloads | int | NOT NULL, DEFAULT 0 | Tổng số lượt tải xuống (denormalized counter) |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm upload |
 
-#### ***4.2.3. Bảng doc\_chunks — Đoạn nội dung tài liệu (phục vụ RAG AI)***
+##### ***3.2.2.2.3. Bảng doc\_chunks — Đoạn nội dung tài liệu (phục vụ RAG AI)***
 
 Lưu trữ các đoạn văn bản đã được tách (chunked) từ file PDF bởi Worker, cùng với vector embedding AI. Đây là bảng cốt lõi phục vụ cho chức năng Chat AI (Retrieval-Augmented Generation).
 
-*Bảng 4: Cấu trúc bảng doc\_chunks*
+*Bảng 3.4: Cấu trúc bảng doc\_chunks*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -1005,42 +1005,44 @@ Lưu trữ các đoạn văn bản đã được tách (chunked) từ file PDF b
 | document\_id | uuid | NOT NULL, FK → documents(id) ON DELETE CASCADE | Tài liệu chứa chunk |
 | chunk\_index | int | NOT NULL | Thứ tự chunk trong tài liệu (0, 1, 2, ...) |
 | content | text | NOT NULL | Nội dung văn bản thuần (1200 ký tự/chunk, overlap 150 ký tự) |
-| embedding | vector(1024) | NULL | Vector embedding 1024 chiều — sinh bởi FPT.AI hoặc Gemini |
+| embedding | vector(1024) | NULL | Vector embedding 1024 chiều — sinh bởi FPT Cloud AI |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm tạo chunk |
 
-#### ***4.2.4. Bảng document\_stars — Lượt yêu thích tài liệu***
+##### ***3.2.2.2.4. Bảng document\_stars — Lượt yêu thích tài liệu***
 
 Bảng many-to-many ghi nhận user nào đã star tài liệu nào. Thiết kế theo mô hình GitHub Stars — toggle on/off.
 
-*Bảng 5: Cấu trúc bảng document\_stars*
+*Bảng 3.5: Cấu trúc bảng document\_stars*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
-| user\_id | uuid | NOT NULL, FK → users(id) ON DELETE CASCADE | Người dùng đã star |
-| document\_id | uuid | NOT NULL, FK → documents(id) ON DELETE CASCADE | Tài liệu được star |
+| user\_id | uuid | NOT NULL, FK → users(id) ON DELETE CASCADE, PRIMARY KEY (kép) | Người dùng đã star |
+| document\_id | uuid | NOT NULL, FK → documents(id) ON DELETE CASCADE, PRIMARY KEY (kép) | Tài liệu được star |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm star |
 
-#### ***4.2.5. Bảng document\_reports — Báo cáo vi phạm tài liệu***
+Khóa chính kép `PRIMARY KEY (user_id, document_id)` đảm bảo mỗi user chỉ star một tài liệu tối đa một lần, đúng tinh thần toggle on/off kiểu GitHub Star — chặn được việc star trùng ngay ở mức ràng buộc CSDL, không phải chỉ kiểm tra ở tầng ứng dụng.
+
+##### ***3.2.2.2.5. Bảng document\_reports — Báo cáo vi phạm tài liệu***
 
 Cho phép user báo cáo tài liệu vi phạm. Admin xử lý qua dashboard quản trị.
 
-*Bảng 6: Cấu trúc bảng document\_reports*
+*Bảng 3.6: Cấu trúc bảng document\_reports*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
-| id | uuid | PRIMARY KEY, DEFAULT gen\_random\_uuid() | ID báo cáo |
+| id | uuid | PRIMARY KEY, DEFAULT uuid\_generate\_v4() | ID báo cáo |
 | user\_id | uuid | NOT NULL, FK → users(id) ON DELETE CASCADE | Người gửi báo cáo |
 | document\_id | uuid | NOT NULL, FK → documents(id) ON DELETE CASCADE | Tài liệu bị báo cáo |
 | reason | text | NOT NULL | Lý do vi phạm (tối thiểu 5 ký tự) |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm gửi báo cáo |
 
-### ***4.3. Nhóm Trắc nghiệm (Quiz & Leaderboard)***
+#### ***3.2.2.3. Nhóm Trắc nghiệm (Quiz & Leaderboard)***
 
-#### ***4.3.1. Bảng quizzes — Bài trắc nghiệm***
+##### ***3.2.2.3.1. Bảng quizzes — Bài trắc nghiệm***
 
 Lưu trữ bài trắc nghiệm với câu hỏi dạng JSONB. Trường correct trong JSONB chỉ được sử dụng phía server để chấm điểm — API ẩn hoàn toàn trường này khi trả về client.
 
-*Bảng 7: Cấu trúc bảng quizzes*
+*Bảng 3.7: Cấu trúc bảng quizzes*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -1051,11 +1053,11 @@ Lưu trữ bài trắc nghiệm với câu hỏi dạng JSONB. Trường correct
 | created\_by | uuid | NOT NULL, FK → users(id) | Người tạo quiz |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm tạo |
 
-#### ***4.3.2. Bảng quiz\_attempts — Lịch sử làm bài***
+##### ***3.2.2.3.2. Bảng quiz\_attempts — Lịch sử làm bài***
 
 Ghi nhận mỗi lần user nộp bài thi. Dữ liệu phục vụ cho bảng xếp hạng real-time (Leaderboard) qua Socket.IO.
 
-*Bảng 8: Cấu trúc bảng quiz\_attempts*
+*Bảng 3.8: Cấu trúc bảng quiz\_attempts*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -1067,11 +1069,11 @@ Ghi nhận mỗi lần user nộp bài thi. Dữ liệu phục vụ cho bảng x
 | time\_taken\_seconds | int | NOT NULL, DEFAULT 0 | Thời gian làm bài (giây, max 9999\) |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm nộp bài |
 
-### ***4.4. Nhóm Diễn đàn (Forum)***
+#### ***3.2.2.4. Nhóm Diễn đàn (Forum)***
 
-#### ***4.4.1. Bảng forum\_threads — Chủ đề diễn đàn***
+##### ***3.2.2.4.1. Bảng forum\_threads — Chủ đề diễn đàn***
 
-*Bảng 9: Cấu trúc bảng forum\_threads*
+*Bảng 3.9: Cấu trúc bảng forum\_threads*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -1082,11 +1084,11 @@ Ghi nhận mỗi lần user nộp bài thi. Dữ liệu phục vụ cho bảng x
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm đăng |
 | updated\_at | timestamptz | NOT NULL, DEFAULT now() | Cập nhật lần cuối (bump khi có bình luận mới) |
 
-#### ***4.4.2. Bảng forum\_posts — Bình luận diễn đàn***
+##### ***3.2.2.4.2. Bảng forum\_posts — Bình luận diễn đàn***
 
 Hỗ trợ bình luận lồng nhiều cấp (nested comments) thông qua self-referencing FK parent\_id.
 
-*Bảng 10: Cấu trúc bảng forum\_posts*
+*Bảng 3.10: Cấu trúc bảng forum\_posts*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |
@@ -1097,11 +1099,11 @@ Hỗ trợ bình luận lồng nhiều cấp (nested comments) thông qua self-r
 | parent\_id | uuid | NULL, FK → forum\_posts(id) ON DELETE CASCADE | Bình luận cha (self-referencing) |
 | created\_at | timestamptz | NOT NULL, DEFAULT now() | Thời điểm bình luận |
 
-### ***4.5. Nhóm Tiện ích (Utilities)***
+#### ***3.2.2.5. Nhóm Tiện ích (Utilities)***
 
-#### ***4.5.1. Bảng notifications — Thông báo hệ thống***
+##### ***3.2.2.5.1. Bảng notifications — Thông báo hệ thống***
 
-*Bảng 11: Cấu trúc bảng notifications*
+*Bảng 3.11: Cấu trúc bảng notifications*
 
 | Trường | Kiểu dữ liệu | Ràng buộc | Mô tả |
 | :---- | :---- | :---- | :---- |

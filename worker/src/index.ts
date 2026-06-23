@@ -2,7 +2,6 @@ import "dotenv/config";
 import crypto from "crypto";
 import amqp from "amqplib";
 import pg from "pg";
-import { createClient } from "redis";
 import { Client as MinioClient } from "minio";
 import pdfParse from "pdf-parse";
 import { loadEnv } from "./config/env";
@@ -23,8 +22,6 @@ const pool = new pg.Pool({
   user: env.POSTGRES_USER,
   password: env.POSTGRES_PASSWORD,
 });
-
-const redis = createClient({ url: env.REDIS_URL });
 
 const minio = new MinioClient({
   endPoint: env.MINIO_ENDPOINT,
@@ -122,9 +119,6 @@ async function processDocument(documentId: string) {
     console.warn("[Worker] Extract/embed failed for", documentId, err);
     throw err;
   }
-
-  // Minimal trust score example (Phase 4 placeholder)
-  await redis.incr(`trust:${doc.owner_id ?? "unknown"}`);
 }
 
 async function connectWithRetry(url: string, retries = 5) {
@@ -179,7 +173,6 @@ async function handleProcessingFailure(
 
 async function main() {
   startMetricsServer(env.METRICS_PORT);
-  await redis.connect();
   const conn = await connectWithRetry(env.RABBITMQ_URL);
   const ch = await conn.createChannel();
   await ch.assertQueue(QUEUE, { durable: true });

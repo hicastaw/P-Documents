@@ -7,8 +7,6 @@ const EnvSchema = z.object({
   POSTGRES_USER: z.string().default("pdocs"),
   POSTGRES_PASSWORD: z.string().default("pdocs_dev_password"),
 
-  REDIS_URL: z.string().default("redis://redis:6379"),
-
   MINIO_ENDPOINT: z.string().default("minio"),
   MINIO_PORT: z.coerce.number().default(9000),
   MINIO_ACCESS_KEY: z.string().default("minioadmin"),
