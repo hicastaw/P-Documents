@@ -7,7 +7,7 @@ import { askQuestion as askQuestionApi } from "../services/chatApi";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { MessageSquare, Send, AlertCircle, X, FolderOpen, FileText } from "lucide-react";
 
-type Doc = { id: string; title: string; status: string };
+type Doc = { id: string; title: string; status: string; chunk_status: string };
 type Message = { role: "user" | "ai"; text: string };
 
 export default function ChatPage() {
@@ -23,7 +23,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!auth) return;
     apiJsonAuth<{ documents: Doc[] }>("/documents").then((j) =>
-      setDocs((j.documents ?? []).filter((d) => d.status !== "rejected")),
+      setDocs((j.documents ?? []).filter((d) => d.status === "approved" && d.chunk_status === "completed")),
     );
   }, [!!auth]);
 

@@ -129,7 +129,7 @@ export async function listDocumentsDefault(opts: {
   const result = await pool.query(
     `
     SELECT
-      d.id, d.title, d.description, d.mime, d.size, d.status, d.created_at,
+      d.id, d.title, d.description, d.mime, d.size, d.status, d.chunk_status, d.created_at,
       d.stars, d.downloads, d.category_id,
       c.slug AS category_slug, c.name AS category_name,
       u.display_name AS uploader_name, u.email AS uploader_email,
@@ -161,7 +161,7 @@ export async function hydrateDocumentsByIds(opts: {
   const result = await pool.query(
     `
     SELECT
-      d.id, d.title, d.description, d.mime, d.size, d.status, d.created_at,
+      d.id, d.title, d.description, d.mime, d.size, d.status, d.chunk_status, d.created_at,
       d.stars, d.downloads, d.category_id,
       c.slug AS category_slug, c.name AS category_name,
       u.display_name AS uploader_name, u.email AS uploader_email,
