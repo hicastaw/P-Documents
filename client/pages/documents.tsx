@@ -113,9 +113,10 @@ export default function DocumentsPage() {
 
       setUploadProgress(80);
 
-      await completeUpload({
+      const finalTitle = title || file.name.replace(/\.[^/.]+$/, "");
+      const { document: createdDoc } = await completeUpload({
         objectKey: p.objectKey,
-        title: title || file.name.replace(/\.[^/.]+$/, ""),
+        title: finalTitle,
         description: description || undefined,
         category: category || undefined,
         mime: file.type || "application/pdf",
@@ -123,8 +124,28 @@ export default function DocumentsPage() {
       });
 
       setUploadProgress(100);
-      showToast(`Đã tải lên "${title || file.name}" thành công!`);
-      await load();
+      showToast(`Đã tải lên "${finalTitle}" thành công!`);
+
+      // Chèn ngay vào danh sách thay vì gọi lại load() — search cache 30s sẽ
+      // trả về danh sách cũ chưa có tài liệu này nếu gọi load() ngay lúc này.
+      const newDoc: Doc = {
+        id: createdDoc.id,
+        title: createdDoc.title,
+        description: description || null,
+        mime: file.type || "application/pdf",
+        size: file.size,
+        status: createdDoc.status,
+        created_at: createdDoc.created_at,
+        uploader_name: auth?.display_name ?? null,
+        uploader_email: auth?.email ?? null,
+        category_id: null,
+        category_slug: category || null,
+        category_name: CATEGORIES.find((c) => c.value === category)?.label ?? null,
+        stars: 0,
+        downloads: 0,
+        is_starred: false,
+      };
+      setDocs((prev) => [newDoc, ...prev]);
     } catch (err: any) {
       const raw = err?.message ?? "unknown";
       setError(friendlyUploadError(raw));
